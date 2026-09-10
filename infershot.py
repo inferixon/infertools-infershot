@@ -12,7 +12,7 @@ import tkinter as tk
 from ctypes import wintypes
 from pathlib import Path
 
-from PIL import ImageDraw, ImageEnhance, ImageGrab, ImageTk
+from PIL import ImageDraw, ImageEnhance, ImageFont, ImageGrab, ImageTk
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -378,6 +378,12 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
+    TOOLBAR_TOOLS = ("line", "arrow", "freehand", "text")
+    TOOLBAR_BUTTON = 34
+    TOOLBAR_GAP = 4
+    TOOLBAR_PAD = 6
+    TOOLBAR_MARGIN = 8
+    TEXT_SIZE = 22
 
     def __init__(self, root):
         self.root = root
@@ -402,6 +408,13 @@ class RectSelector:
         self.annotations = []
         self.pending_annotation = None
         self.pending_annotation_id = None
+        self.active_tool = None
+        self.toolbar_hitboxes = []
+        self.freehand_points = None
+        self.freehand_id = None
+        self.text_entry = None
+        self.text_window_id = None
+        self.text_origin = None
 
         self.window = tk.Toplevel(root)
         self.window.overrideredirect(True)
@@ -485,8 +498,22 @@ class RectSelector:
         }.get(mode, "crosshair")
 
     def on_motion(self, event):
+        if self.text_entry is not None and event.widget is self.text_entry:
+            return
         self.update_annotation_preview(event)
-        self.canvas.configure(cursor=self.cursor_for_mode(self.hit_test(event.x, event.y)))
+        if self.toolbar_tool_at(event.x, event.y):
+            cursor = "hand2"
+        else:
+            mode = self.hit_test(event.x, event.y)
+            if mode not in {"new", "move"}:
+                cursor = self.cursor_for_mode(mode)
+            elif self.active_tool == "text" and self.point_in_selection(event.x, event.y):
+                cursor = "xterm"
+            elif self.active_tool and self.point_in_selection(event.x, event.y):
+                cursor = "crosshair"
+            else:
+                cursor = self.cursor_for_mode(mode)
+        self.canvas.configure(cursor=cursor)
 
     def point_in_selection(self, x, y):
         rect = self.normalized_rect()
@@ -544,6 +571,158 @@ class RectSelector:
             options.update(arrow=tk.LAST, arrowshape=(27, 33, 10))
         return self.canvas.create_line(*start, *end, **options)
 
+    def toolbar_tool_at(self, x, y):
+        for left, top, right, bottom, tool in self.toolbar_hitboxes:
+            if left <= x <= right and top <= y <= bottom:
+                return tool
+        return None
+
+    def select_tool(self, tool):
+        self.discard_pending()
+        self.active_tool = None if self.active_tool == tool else tool
+        self.draw_toolbar()
+        log(f"toolbar tool={self.active_tool or 'none'}")
+
+    def draw_toolbar(self):
+        self.canvas.delete("toolbar")
+        self.toolbar_hitboxes = []
+        rect = self.normalized_rect()
+        if not rect:
+            return
+
+        left, top, right, bottom = rect
+        count = len(self.TOOLBAR_TOOLS)
+        width = self.TOOLBAR_PAD * 2 + count * self.TOOLBAR_BUTTON + (count - 1) * self.TOOLBAR_GAP
+        height = self.TOOLBAR_PAD * 2 + self.TOOLBAR_BUTTON
+        x = max(0, min(self.width - width, left))
+        if top >= height + self.TOOLBAR_MARGIN:
+            y = top - height - self.TOOLBAR_MARGIN
+        elif bottom + height + self.TOOLBAR_MARGIN <= self.height:
+            y = bottom + self.TOOLBAR_MARGIN
+        else:
+            y = max(0, min(self.height - height, top + self.TOOLBAR_MARGIN))
+
+        self.canvas.create_rectangle(
+            x, y, x + width, y + height,
+            fill="#111827", outline="#7b8492", width=1,
+            stipple="gray50", tags=("toolbar",),
+        )
+        for index, tool in enumerate(self.TOOLBAR_TOOLS):
+            bx1 = x + self.TOOLBAR_PAD + index * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
+            by1 = y + self.TOOLBAR_PAD
+            bx2 = bx1 + self.TOOLBAR_BUTTON
+            by2 = by1 + self.TOOLBAR_BUTTON
+            selected = tool == self.active_tool
+            self.canvas.create_rectangle(
+                bx1, by1, bx2, by2,
+                fill="#7f1d1d" if selected else "#27303b",
+                outline="#ff5a5a" if selected else "#657080",
+                stipple="gray50", tags=("toolbar",),
+            )
+            self.draw_toolbar_icon(tool, bx1, by1, bx2, by2, selected)
+            self.toolbar_hitboxes.append((bx1, by1, bx2, by2, tool))
+        self.canvas.tag_raise("toolbar")
+
+    def draw_toolbar_icon(self, tool, left, top, right, bottom, selected):
+        color = "#ffffff" if selected else "#c7ced8"
+        cx = (left + right) / 2
+        cy = (top + bottom) / 2
+        tags = ("toolbar",)
+        if tool == "line":
+            self.canvas.create_line(left + 8, bottom - 8, right - 8, top + 8, fill=color, width=3, tags=tags)
+        elif tool == "arrow":
+            self.canvas.create_line(left + 7, bottom - 8, right - 7, top + 8, fill=color, width=3, arrow=tk.LAST, arrowshape=(9, 11, 4), tags=tags)
+        elif tool == "freehand":
+            self.canvas.create_line(
+                left + 6, cy + 5, left + 12, cy - 5, cx, cy + 4,
+                right - 10, cy - 6, right - 6, cy,
+                fill=color, width=3, smooth=True, tags=tags,
+            )
+        else:
+            self.canvas.create_text(cx, cy, text="T", fill=color, font=("Segoe UI", 18, "bold"), tags=tags)
+
+    def start_freehand(self, x, y):
+        self.freehand_points = [(x, y)]
+        self.freehand_id = self.canvas.create_line(
+            x, y, x, y,
+            fill=self.ANNOTATION_COLOR,
+            width=self.ANNOTATION_WIDTH,
+            capstyle=tk.ROUND,
+            joinstyle=tk.ROUND,
+            smooth=True,
+        )
+
+    def extend_freehand(self, x, y):
+        if self.freehand_points is None or self.freehand_id is None:
+            return
+        rect = self.normalized_rect()
+        if not rect:
+            return
+        left, top, right, bottom = rect
+        point = (max(left, min(right, x)), max(top, min(bottom, y)))
+        if math.dist(self.freehand_points[-1], point) < 1:
+            return
+        self.freehand_points.append(point)
+        coords = [coordinate for pair in self.freehand_points for coordinate in pair]
+        self.canvas.coords(self.freehand_id, *coords)
+        self.raise_selection_controls()
+
+    def finish_freehand(self):
+        if self.freehand_points is None:
+            return
+        if len(self.freehand_points) > 1:
+            self.annotations.append({"kind": "freehand", "points": list(self.freehand_points)})
+        elif self.freehand_id is not None:
+            self.canvas.delete(self.freehand_id)
+        self.freehand_points = None
+        self.freehand_id = None
+        self.raise_selection_controls()
+
+    def start_text(self, x, y):
+        self.cancel_text()
+        self.text_origin = (x, y)
+        self.text_entry = tk.Entry(
+            self.window,
+            font=("Segoe UI", self.TEXT_SIZE),
+            fg=self.ANNOTATION_COLOR,
+            bg="#ffffff",
+            insertbackground=self.ANNOTATION_COLOR,
+            relief="flat",
+            width=18,
+        )
+        self.text_window_id = self.canvas.create_window(x, y, window=self.text_entry, anchor="nw")
+        self.text_entry.bind("<Return>", self.commit_text)
+        self.text_entry.bind("<Escape>", self.cancel_text)
+        self.text_entry.focus_set()
+
+    def commit_text(self, _event=None):
+        if self.text_entry is None or self.text_origin is None:
+            return "break"
+        value = self.text_entry.get().strip()
+        origin = self.text_origin
+        self.cancel_text()
+        if value:
+            self.annotations.append({"kind": "text", "start": origin, "text": value})
+            self.canvas.create_text(
+                *origin,
+                text=value,
+                fill=self.ANNOTATION_COLOR,
+                font=("Segoe UI", self.TEXT_SIZE),
+                anchor="nw",
+            )
+            self.raise_selection_controls()
+        return "break"
+
+    def cancel_text(self, _event=None):
+        if self.text_window_id is not None:
+            self.canvas.delete(self.text_window_id)
+        if self.text_entry is not None:
+            self.text_entry.destroy()
+        self.text_entry = None
+        self.text_window_id = None
+        self.text_origin = None
+        return "break"
+
     def update_annotation_preview(self, event):
         if self.pending_annotation is None or self.pending_annotation_id is None:
             return
@@ -555,12 +734,32 @@ class RectSelector:
         self.raise_selection_controls()
 
     def on_down(self, event):
-        if self.pending_annotation is not None:
-            return
-        if self.annotations:
+        if self.text_entry is not None and event.widget is self.text_entry:
             return "break"
+        tool = self.toolbar_tool_at(event.x, event.y)
+        if tool:
+            self.select_tool(tool)
+            return "break"
+        if self.pending_annotation is not None:
+            if self.active_tool == self.pending_annotation["kind"]:
+                return self.annotation_click(event, self.active_tool)
+            return
         x, y = self.local_point(event)
-        self.mode = self.hit_test(x, y)
+        mode = self.hit_test(x, y)
+        if mode not in {"new", "move"}:
+            self.mode = mode
+            self.anchor = (x, y)
+            self.start_rect = self.normalized_rect()
+            return "break"
+        if self.active_tool in {"line", "arrow"} and self.point_in_selection(x, y):
+            return self.annotation_click(event, self.active_tool)
+        if self.active_tool == "freehand" and self.point_in_selection(x, y):
+            self.start_freehand(x, y)
+            return "break"
+        if self.active_tool == "text" and self.point_in_selection(x, y):
+            self.start_text(x, y)
+            return "break"
+        self.mode = mode
         self.anchor = (x, y)
         self.start_rect = self.normalized_rect()
         if self.mode == "new":
@@ -568,7 +767,12 @@ class RectSelector:
         self.draw_rect()
 
     def on_drag(self, event):
+        if self.text_entry is not None and event.widget is self.text_entry:
+            return "break"
         x, y = self.local_point(event)
+        if self.freehand_points is not None:
+            self.extend_freehand(x, y)
+            return
         if not self.anchor:
             return
         ax, ay = self.anchor
@@ -583,9 +787,8 @@ class RectSelector:
             self.rect = (nx1, ny1, nx1 + w, ny1 + h)
         elif self.start_rect:
             x1, y1, x2, y2 = self.start_rect
-            left, top, right, bottom = sorted((x1, x2)), sorted((y1, y2))
-            l, r = left
-            t, b = top
+            l, r = sorted((x1, x2))
+            t, b = sorted((y1, y2))
             if "w" in self.mode:
                 l = min(x, r - self.MIN_SIZE)
             if "e" in self.mode:
@@ -597,7 +800,12 @@ class RectSelector:
             self.rect = (l, t, r, b)
         self.draw_rect()
 
-    def on_up(self, _event):
+    def on_up(self, event):
+        if self.text_entry is not None and event.widget is self.text_entry:
+            return "break"
+        if self.freehand_points is not None:
+            self.finish_freehand()
+            return
         self.anchor = None
         self.start_rect = None
 
@@ -607,6 +815,7 @@ class RectSelector:
             self.canvas.itemconfigure(self.rect_id, state="hidden")
             for handle in self.handles:
                 self.canvas.itemconfigure(handle, state="hidden")
+            self.draw_toolbar()
             return
 
         left, top, right, bottom = rect
@@ -623,22 +832,38 @@ class RectSelector:
             self.canvas.coords(handle, x - half, y - half, x + half, y + half)
             self.canvas.itemconfigure(handle, state="normal")
         self.raise_selection_controls()
+        self.draw_toolbar()
 
     def raise_selection_controls(self):
         self.canvas.tag_raise(self.rect_id)
         for handle in self.handles:
             self.canvas.tag_raise(handle)
+        self.canvas.tag_raise("toolbar")
 
     def draw_annotations(self, image, rect):
         left, top, _right, _bottom = rect
         draw = ImageDraw.Draw(image)
         for annotation in self.annotations:
+            kind = annotation["kind"]
+            if kind == "freehand":
+                points = [(x - left, y - top) for x, y in annotation["points"]]
+                if len(points) > 1:
+                    draw.line(points, fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, joint="curve")
+                continue
+            if kind == "text":
+                x, y = annotation["start"]
+                try:
+                    font = ImageFont.truetype("segoeui.ttf", self.TEXT_SIZE)
+                except OSError:
+                    font = ImageFont.load_default()
+                draw.text((x - left, y - top), annotation["text"], fill=self.ANNOTATION_COLOR, font=font)
+                continue
             sx, sy = annotation["start"]
             ex, ey = annotation["end"]
             start = (sx - left, sy - top)
             end = (ex - left, ey - top)
             draw.line((start, end), fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH)
-            if annotation["kind"] == "arrow":
+            if kind == "arrow":
                 self.draw_arrow_head(draw, start, end)
 
     def draw_arrow_head(self, draw, start, end):
@@ -667,16 +892,31 @@ class RectSelector:
         self.window.destroy()
 
     def on_cancel(self, _event=None):
-        if self.pending_annotation is not None:
-            if self.pending_annotation_id is not None:
-                self.canvas.delete(self.pending_annotation_id)
-            self.pending_annotation = None
-            self.pending_annotation_id = None
+        if self.discard_pending():
             self.canvas.configure(cursor="crosshair")
             log("pending annotation cancelled")
             return "break"
         self.cancel()
         return "break"
+
+    def discard_pending(self):
+        discarded = False
+        if self.pending_annotation is not None:
+            if self.pending_annotation_id is not None:
+                self.canvas.delete(self.pending_annotation_id)
+            self.pending_annotation = None
+            self.pending_annotation_id = None
+            discarded = True
+        if self.freehand_points is not None:
+            if self.freehand_id is not None:
+                self.canvas.delete(self.freehand_id)
+            self.freehand_points = None
+            self.freehand_id = None
+            discarded = True
+        if self.text_entry is not None:
+            self.cancel_text()
+            discarded = True
+        return discarded
 
     def cancel(self, _event=None):
         self.window.destroy()

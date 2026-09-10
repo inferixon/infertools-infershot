@@ -11,6 +11,7 @@ and adds straight red lines or arrows before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
+- Semi-transparent selection toolbar with line, arrow, freehand, and text tools
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -65,6 +66,17 @@ The second arrow click marks the arrow tip. Completed annotations are included i
 both the saved image and the clipboard image. If a line or arrow has been started
 but not finished, `Escape` removes only that pending annotation. With no pending
 annotation, `Escape` cancels the capture.
+
+After selecting a rectangle, use the toolbar above its left edge:
+
+- Line – click the start and end points.
+- Arrow – click the start point, then the arrow tip.
+- Freehand – hold and drag the left mouse button.
+- Text – click inside the selection, type, and press `Enter`; press `Enter` again
+  to save the capture.
+
+Click the active toolbar icon again to return to normal selection move mode.
+Resize handles always remain available, including after annotations are added.
 
 ## Configuration
 
