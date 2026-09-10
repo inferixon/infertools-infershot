@@ -4,6 +4,10 @@
   "quality": 95,
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
+  "text": {
+    "font_family": "Palatino Linotype",
+    "font_size": 22
+  },
   "hotkeys": {
     "rectangle": "PrintScreen",
     "fullscreen": "Ctrl+PrintScreen",

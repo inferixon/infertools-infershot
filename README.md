@@ -11,7 +11,7 @@ and adds straight red lines or arrows before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Floating translucent buttons for line, arrow, freehand, and text tools
+- Floating translucent buttons for freehand, line, arrow, rectangle, and text tools
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -69,13 +69,15 @@ annotation, `Escape` cancels the capture.
 
 After selecting a rectangle, use the floating buttons above its left edge. The
 button group has no panel; each rounded button uses a faint border, a translucent
-fill, wider spacing, and a subtle white hover glow:
+fill, wider spacing, and a subtle white hover glow. The tools appear in this order:
 
+- Freehand – hold and drag the left mouse button.
 - Line – click the start and end points.
 - Arrow – click the start point, then the arrow tip.
-- Freehand – hold and drag the left mouse button.
-- Text – click inside the selection, type, and press `Enter`; press `Enter` again
-  to save the capture.
+- Rectangle – hold and drag the left mouse button to frame an area.
+- Text – click inside the selection and type inside a transparent, border-only
+  editor. `Backspace` removes characters and `Enter` commits the text; press
+  `Enter` again to save the capture.
 
 Click the active toolbar icon again to return to normal selection move mode.
 Resize handles always remain available, including after annotations are added.
@@ -91,6 +93,10 @@ Resize handles always remain available, including after annotations are added.
   "quality": 95,
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
+  "text": {
+    "font_family": "Palatino Linotype",
+    "font_size": 22
+  },
   "hotkeys": {
     "rectangle": "PrintScreen",
     "fullscreen": "Ctrl+PrintScreen",
@@ -109,6 +115,8 @@ Supported selector combinations use `Ctrl`, `Shift`, or `Alt` with
 Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
+The default annotation font is Palatino Linotype at 22 px. Font size is clamped
+to the supported range of 8–96 px.
 
 ## License
 

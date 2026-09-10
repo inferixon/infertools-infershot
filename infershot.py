@@ -26,6 +26,10 @@ DEFAULT_CONFIG = {
     "quality": 95,
     "filename_mask": "ScreenShot-{nnn}",
     "copy_to_clipboard": True,
+    "text": {
+        "font_family": "Palatino Linotype",
+        "font_size": 22
+    },
     "hotkeys": {
         "rectangle": "PrintScreen",
         "fullscreen": "Ctrl+PrintScreen",
@@ -150,11 +154,14 @@ def load_config():
 
     config = DEFAULT_CONFIG | raw
     config["hotkeys"] = DEFAULT_CONFIG["hotkeys"] | raw.get("hotkeys", {})
+    config["text"] = DEFAULT_CONFIG["text"] | raw.get("text", {})
     config["format"] = str(config["format"]).lower().lstrip(".")
     if config["format"] == "jpeg":
         config["format"] = "jpg"
     config["quality"] = max(1, min(100, int(config["quality"])))
     config["copy_to_clipboard"] = bool(config["copy_to_clipboard"])
+    config["text"]["font_family"] = str(config["text"]["font_family"]).strip() or DEFAULT_CONFIG["text"]["font_family"]
+    config["text"]["font_size"] = max(8, min(96, int(config["text"]["font_size"])))
     return config
 
 
@@ -378,12 +385,11 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("line", "arrow", "freehand", "text")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "text")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
     TOOLBAR_MARGIN = 8
-    TEXT_SIZE = 22
 
     def __init__(self, root):
         self.root = root
@@ -413,8 +419,10 @@ class RectSelector:
         self.toolbar_hitboxes = []
         self.freehand_points = None
         self.freehand_id = None
-        self.text_entry = None
-        self.text_window_id = None
+        self.text_editing = False
+        self.text_buffer = ""
+        self.text_box_id = None
+        self.text_preview_id = None
         self.text_origin = None
 
         self.window = tk.Toplevel(root)
@@ -440,6 +448,7 @@ class RectSelector:
         self.bind_hotkey("arrow_finish", self.on_arrow_finish)
         self.bind_hotkey("save", self.save)
         self.bind_hotkey("cancel", self.on_cancel)
+        self.window.bind("<KeyPress>", self.on_text_key, add="+")
         self.window.bind("<Motion>", self.on_motion)
         self.draw_rect()
 
@@ -499,8 +508,6 @@ class RectSelector:
         }.get(mode, "crosshair")
 
     def on_motion(self, event):
-        if self.text_entry is not None and event.widget is self.text_entry:
-            return
         self.update_annotation_preview(event)
         hover_tool = self.toolbar_tool_at(event.x, event.y)
         if hover_tool != self.hover_tool:
@@ -660,6 +667,8 @@ class RectSelector:
             self.canvas.create_line(left + 8, bottom - 8, right - 8, top + 8, fill=color, width=3, tags=tags)
         elif tool == "arrow":
             self.canvas.create_line(left + 7, bottom - 8, right - 7, top + 8, fill=color, width=3, arrow=tk.LAST, arrowshape=(9, 11, 4), tags=tags)
+        elif tool == "rectangle":
+            self.canvas.create_rectangle(left + 8, top + 9, right - 8, bottom - 9, fill="", outline=color, width=2, tags=tags)
         elif tool == "freehand":
             self.canvas.create_line(
                 left + 6, cy + 5, left + 12, cy - 5, cx, cy + 4,
@@ -706,27 +715,103 @@ class RectSelector:
         self.freehand_id = None
         self.raise_selection_controls()
 
+    def start_rectangle(self, x, y):
+        self.pending_annotation = {"kind": "rectangle", "start": (x, y)}
+        self.pending_annotation_id = self.canvas.create_rectangle(
+            x, y, x, y,
+            fill="",
+            outline=self.ANNOTATION_COLOR,
+            width=self.ANNOTATION_WIDTH,
+        )
+
+    def finish_rectangle(self, x, y):
+        if self.pending_annotation is None or self.pending_annotation["kind"] != "rectangle":
+            return
+        start = self.pending_annotation["start"]
+        if abs(x - start[0]) >= 3 and abs(y - start[1]) >= 3:
+            self.annotations.append({"kind": "rectangle", "start": start, "end": (x, y)})
+            self.canvas.coords(self.pending_annotation_id, *start, x, y)
+        elif self.pending_annotation_id is not None:
+            self.canvas.delete(self.pending_annotation_id)
+        self.pending_annotation = None
+        self.pending_annotation_id = None
+        self.raise_selection_controls()
+
     def start_text(self, x, y):
         self.cancel_text()
         self.text_origin = (x, y)
-        self.text_entry = tk.Entry(
-            self.window,
-            font=("Segoe UI", self.TEXT_SIZE),
-            fg=self.ANNOTATION_COLOR,
-            bg="#ffffff",
-            insertbackground=self.ANNOTATION_COLOR,
-            relief="flat",
-            width=18,
+        self.text_editing = True
+        self.text_buffer = ""
+        self.text_box_id = self.canvas.create_rectangle(
+            x - 5, y - 4, x + 165, y + CONFIG["text"]["font_size"] + 10,
+            fill="", outline="#ff7777", width=1,
         )
-        self.text_window_id = self.canvas.create_window(x, y, window=self.text_entry, anchor="nw")
-        self.text_entry.bind("<Return>", self.commit_text)
-        self.text_entry.bind("<Escape>", self.cancel_text)
-        self.text_entry.focus_set()
+        self.text_preview_id = self.canvas.create_text(
+            x, y,
+            text=" ",
+            fill=self.ANNOTATION_COLOR,
+            font=self.text_font(),
+            anchor="nw",
+        )
+        self.window.focus_force()
+
+    def text_font(self):
+        return CONFIG["text"]["font_family"], CONFIG["text"]["font_size"]
+
+    def image_text_font(self):
+        family = CONFIG["text"]["font_family"]
+        size = CONFIG["text"]["font_size"]
+        font_files = {
+            "palatino linotype": "pala.ttf",
+            "segoe ui": "segoeui.ttf",
+            "arial": "arial.ttf",
+        }
+        candidates = []
+        filename = font_files.get(family.lower())
+        if filename:
+            candidates.append(Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / filename)
+        candidates.extend((family, f"{family.replace(' ', '')}.ttf"))
+        for candidate in candidates:
+            try:
+                return ImageFont.truetype(str(candidate), size)
+            except OSError:
+                continue
+        log(f"text font fallback family={family!r}")
+        return ImageFont.load_default()
+
+    def update_text_editor(self):
+        if not self.text_editing or self.text_preview_id is None or self.text_box_id is None:
+            return
+        display = self.text_buffer or " "
+        self.canvas.itemconfigure(self.text_preview_id, text=display)
+        bounds = self.canvas.bbox(self.text_preview_id)
+        x, y = self.text_origin
+        text_width = 0 if not bounds else bounds[2] - bounds[0]
+        text_height = CONFIG["text"]["font_size"] if not bounds else bounds[3] - bounds[1]
+        self.canvas.coords(
+            self.text_box_id,
+            x - 5, y - 4,
+            x + max(160, text_width + 12),
+            y + max(CONFIG["text"]["font_size"] + 10, text_height + 10),
+        )
+        self.raise_selection_controls()
+
+    def on_text_key(self, event):
+        if not self.text_editing:
+            return
+        if event.keysym == "BackSpace":
+            self.text_buffer = self.text_buffer[:-1]
+        elif event.char and event.char.isprintable() and not (event.state & 0x000C):
+            self.text_buffer += event.char
+        else:
+            return "break"
+        self.update_text_editor()
+        return "break"
 
     def commit_text(self, _event=None):
-        if self.text_entry is None or self.text_origin is None:
+        if not self.text_editing or self.text_origin is None:
             return "break"
-        value = self.text_entry.get().strip()
+        value = self.text_buffer.strip()
         origin = self.text_origin
         self.cancel_text()
         if value:
@@ -735,19 +820,21 @@ class RectSelector:
                 *origin,
                 text=value,
                 fill=self.ANNOTATION_COLOR,
-                font=("Segoe UI", self.TEXT_SIZE),
+                font=self.text_font(),
                 anchor="nw",
             )
             self.raise_selection_controls()
         return "break"
 
     def cancel_text(self, _event=None):
-        if self.text_window_id is not None:
-            self.canvas.delete(self.text_window_id)
-        if self.text_entry is not None:
-            self.text_entry.destroy()
-        self.text_entry = None
-        self.text_window_id = None
+        if self.text_box_id is not None:
+            self.canvas.delete(self.text_box_id)
+        if self.text_preview_id is not None:
+            self.canvas.delete(self.text_preview_id)
+        self.text_editing = False
+        self.text_buffer = ""
+        self.text_box_id = None
+        self.text_preview_id = None
         self.text_origin = None
         return "break"
 
@@ -762,7 +849,7 @@ class RectSelector:
         self.raise_selection_controls()
 
     def on_down(self, event):
-        if self.text_entry is not None and event.widget is self.text_entry:
+        if self.text_editing:
             return "break"
         tool = self.toolbar_tool_at(event.x, event.y)
         if tool:
@@ -784,6 +871,9 @@ class RectSelector:
         if self.active_tool == "freehand" and self.point_in_selection(x, y):
             self.start_freehand(x, y)
             return "break"
+        if self.active_tool == "rectangle" and self.point_in_selection(x, y):
+            self.start_rectangle(x, y)
+            return "break"
         if self.active_tool == "text" and self.point_in_selection(x, y):
             self.start_text(x, y)
             return "break"
@@ -795,9 +885,17 @@ class RectSelector:
         self.draw_rect()
 
     def on_drag(self, event):
-        if self.text_entry is not None and event.widget is self.text_entry:
-            return "break"
         x, y = self.local_point(event)
+        if self.pending_annotation is not None and self.pending_annotation["kind"] == "rectangle":
+            rect = self.normalized_rect()
+            if rect:
+                left, top, right, bottom = rect
+                x = max(left, min(right, x))
+                y = max(top, min(bottom, y))
+            start = self.pending_annotation["start"]
+            self.canvas.coords(self.pending_annotation_id, *start, x, y)
+            self.raise_selection_controls()
+            return
         if self.freehand_points is not None:
             self.extend_freehand(x, y)
             return
@@ -829,8 +927,15 @@ class RectSelector:
         self.draw_rect()
 
     def on_up(self, event):
-        if self.text_entry is not None and event.widget is self.text_entry:
-            return "break"
+        if self.pending_annotation is not None and self.pending_annotation["kind"] == "rectangle":
+            x, y = self.local_point(event)
+            rect = self.normalized_rect()
+            if rect:
+                left, top, right, bottom = rect
+                x = max(left, min(right, x))
+                y = max(top, min(bottom, y))
+            self.finish_rectangle(x, y)
+            return
         if self.freehand_points is not None:
             self.finish_freehand()
             return
@@ -880,11 +985,19 @@ class RectSelector:
                 continue
             if kind == "text":
                 x, y = annotation["start"]
-                try:
-                    font = ImageFont.truetype("segoeui.ttf", self.TEXT_SIZE)
-                except OSError:
-                    font = ImageFont.load_default()
+                font = self.image_text_font()
                 draw.text((x - left, y - top), annotation["text"], fill=self.ANNOTATION_COLOR, font=font)
+                continue
+            if kind == "rectangle":
+                sx, sy = annotation["start"]
+                ex, ey = annotation["end"]
+                box_left, box_right = sorted((sx - left, ex - left))
+                box_top, box_bottom = sorted((sy - top, ey - top))
+                draw.rectangle(
+                    (box_left, box_top, box_right, box_bottom),
+                    outline=self.ANNOTATION_COLOR,
+                    width=self.ANNOTATION_WIDTH,
+                )
                 continue
             sx, sy = annotation["start"]
             ex, ey = annotation["end"]
@@ -910,6 +1023,8 @@ class RectSelector:
         draw.polygon((end, left, right), fill=self.ANNOTATION_COLOR)
 
     def save(self, _event=None):
+        if self.text_editing:
+            return self.commit_text()
         rect = self.normalized_rect()
         if not rect:
             return
@@ -941,7 +1056,7 @@ class RectSelector:
             self.freehand_points = None
             self.freehand_id = None
             discarded = True
-        if self.text_entry is not None:
+        if self.text_editing:
             self.cancel_text()
             discarded = True
         return discarded

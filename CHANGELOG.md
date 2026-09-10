@@ -8,6 +8,10 @@
 - Made capture and annotation hotkeys configurable.
 - Made `Escape` cancel an unfinished annotation before cancelling the capture.
 - Added spaced rounded line, arrow, freehand, and text buttons with a subtle white hover glow.
+- Reordered the toolbar to freehand, line, arrow, rectangle, and text.
+- Added drag-to-draw red rectangle annotations.
+- Replaced the opaque text field with a transparent, border-only canvas editor.
+- Made the annotation font family and size configurable, defaulting to Palatino Linotype at 22 px.
 - Fixed selection resize handles, including resizing after annotations are added.
 
 ## 1.1.0
