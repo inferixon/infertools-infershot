@@ -11,7 +11,7 @@ and adds straight red lines or arrows before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Floating translucent buttons for freehand, line, arrow, rectangle, and text tools
+- Floating translucent buttons for freehand, line, arrow, rectangle, text, and eraser tools
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -76,8 +76,10 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Arrow – click the start point, then the arrow tip.
 - Rectangle – hold and drag the left mouse button to frame an area.
 - Text – click inside the selection and type inside a transparent, border-only
-  editor. `Backspace` removes characters and `Enter` commits the text; press
-  `Enter` again to save the capture.
+  editor. `Enter` starts a new line, `Ctrl+Enter` commits the text, and `Escape`
+  cancels the active text editor.
+- Eraser – clear every completed or pending annotation without closing or changing
+  the capture selection.
 
 Click the active toolbar icon again to return to normal selection move mode.
 Resize handles always remain available, including after annotations are added.

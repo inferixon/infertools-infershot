@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed text entry by routing keyboard and IME input through a native multiline editor.
+- Kept the visible text editor transparent with a border-only frame and red caret.
+- Made `Enter` insert a newline and `Ctrl+Enter` commit the text annotation.
+- Added a final eraser button that clears all annotations while preserving the capture selection.
+
 ## 1.2.0
 
 - Added visual QA annotations inside rectangle captures.

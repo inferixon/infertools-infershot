@@ -11,6 +11,7 @@ import time
 import tkinter as tk
 from ctypes import wintypes
 from pathlib import Path
+from tkinter import font as tkfont
 
 from PIL import ImageDraw, ImageEnhance, ImageFont, ImageGrab, ImageTk
 
@@ -385,7 +386,7 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "text")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "text", "eraser")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
@@ -423,6 +424,8 @@ class RectSelector:
         self.text_buffer = ""
         self.text_box_id = None
         self.text_preview_id = None
+        self.text_caret_id = None
+        self.text_input = None
         self.text_origin = None
 
         self.window = tk.Toplevel(root)
@@ -431,7 +434,14 @@ class RectSelector:
         self.window.geometry(f"{self.width}x{self.height}+{self.vleft}+{self.vtop}")
         self.window.focus_force()
 
-        self.canvas = tk.Canvas(self.window, width=self.width, height=self.height, highlightthickness=0, cursor="crosshair")
+        self.canvas = tk.Canvas(
+            self.window,
+            width=self.width,
+            height=self.height,
+            highlightthickness=0,
+            cursor="crosshair",
+            takefocus=True,
+        )
         self.canvas.pack(fill="both", expand=True)
         self.image_id = self.canvas.create_image(0, 0, image=self.photo, anchor="nw")
         self.rect_id = self.canvas.create_rectangle(0, 0, 0, 0, outline="#00d4ff", width=2, state="hidden")
@@ -448,7 +458,6 @@ class RectSelector:
         self.bind_hotkey("arrow_finish", self.on_arrow_finish)
         self.bind_hotkey("save", self.save)
         self.bind_hotkey("cancel", self.on_cancel)
-        self.window.bind("<KeyPress>", self.on_text_key, add="+")
         self.window.bind("<Motion>", self.on_motion)
         self.draw_rect()
 
@@ -456,6 +465,7 @@ class RectSelector:
         value = CONFIG["hotkeys"][name]
         binding = selector_binding(value)
         self.window.bind(binding, callback, add="+")
+        self.canvas.bind(binding, callback, add="+")
         log(f"selector hotkey {name}={value} binding={binding}")
 
     def local_point(self, event):
@@ -578,6 +588,7 @@ class RectSelector:
             "fill": self.ANNOTATION_COLOR,
             "width": self.ANNOTATION_WIDTH,
             "capstyle": tk.ROUND,
+            "tags": ("annotation",),
         }
         if kind == "arrow":
             options.update(arrow=tk.LAST, arrowshape=(27, 33, 10))
@@ -590,10 +601,22 @@ class RectSelector:
         return None
 
     def select_tool(self, tool):
+        if tool == "eraser":
+            self.clear_annotations()
+            return
         self.discard_pending()
         self.active_tool = None if self.active_tool == tool else tool
         self.draw_toolbar()
         log(f"toolbar tool={self.active_tool or 'none'}")
+
+    def clear_annotations(self):
+        self.discard_pending()
+        self.annotations.clear()
+        self.canvas.delete("annotation")
+        self.active_tool = None
+        self.draw_toolbar()
+        self.raise_selection_controls()
+        log("annotations cleared")
 
     def create_rounded_rect(self, left, top, right, bottom, radius, **options):
         radius = max(1, min(radius, (right - left) / 2, (bottom - top) / 2))
@@ -675,8 +698,20 @@ class RectSelector:
                 right - 10, cy - 6, right - 6, cy,
                 fill=color, width=3, smooth=True, tags=tags,
             )
-        else:
+        elif tool == "text":
             self.canvas.create_text(cx, cy, text="T", fill=color, font=("Segoe UI", 18, "bold"), tags=tags)
+        else:
+            self.canvas.create_polygon(
+                left + 9, bottom - 12,
+                left + 17, top + 8,
+                right - 8, top + 15,
+                right - 16, bottom - 6,
+                fill="", outline=color, width=2, tags=tags,
+            )
+            self.canvas.create_line(
+                left + 10, bottom - 10, right - 15, bottom - 6,
+                fill=color, width=2, tags=tags,
+            )
 
     def start_freehand(self, x, y):
         self.freehand_points = [(x, y)]
@@ -687,6 +722,7 @@ class RectSelector:
             capstyle=tk.ROUND,
             joinstyle=tk.ROUND,
             smooth=True,
+            tags=("annotation",),
         )
 
     def extend_freehand(self, x, y):
@@ -722,6 +758,7 @@ class RectSelector:
             fill="",
             outline=self.ANNOTATION_COLOR,
             width=self.ANNOTATION_WIDTH,
+            tags=("annotation",),
         )
 
     def finish_rectangle(self, x, y):
@@ -742,6 +779,21 @@ class RectSelector:
         self.text_origin = (x, y)
         self.text_editing = True
         self.text_buffer = ""
+        self.text_input = tk.Text(
+            self.window,
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=True,
+            wrap="none",
+            undo=False,
+        )
+        self.text_input.place(x=-10, y=-10, width=1, height=1)
+        self.text_input.bind("<<Modified>>", self.on_text_change)
+        self.text_input.bind("<KeyRelease>", self.update_text_cursor, add="+")
+        self.text_input.bind("<Return>", self.on_text_return)
+        self.text_input.bind("<KP_Enter>", self.on_text_return)
+        self.text_input.bind(selector_binding(CONFIG["hotkeys"]["cancel"]), self.on_cancel, add="+")
+        self.text_input.edit_modified(False)
         self.text_box_id = self.canvas.create_rectangle(
             x - 5, y - 4, x + 165, y + CONFIG["text"]["font_size"] + 10,
             fill="", outline="#ff7777", width=1,
@@ -753,7 +805,13 @@ class RectSelector:
             font=self.text_font(),
             anchor="nw",
         )
-        self.window.focus_force()
+        self.text_caret_id = self.canvas.create_line(
+            x, y + 2, x, y + CONFIG["text"]["font_size"] + 2,
+            fill=self.ANNOTATION_COLOR,
+            width=2,
+        )
+        self.update_text_editor()
+        self.text_input.focus_force()
 
     def text_font(self):
         return CONFIG["text"]["font_family"], CONFIG["text"]["font_size"]
@@ -780,7 +838,12 @@ class RectSelector:
         return ImageFont.load_default()
 
     def update_text_editor(self):
-        if not self.text_editing or self.text_preview_id is None or self.text_box_id is None:
+        if (
+            not self.text_editing
+            or self.text_preview_id is None
+            or self.text_box_id is None
+            or self.text_caret_id is None
+        ):
             return
         display = self.text_buffer or " "
         self.canvas.itemconfigure(self.text_preview_id, text=display)
@@ -788,24 +851,55 @@ class RectSelector:
         x, y = self.text_origin
         text_width = 0 if not bounds else bounds[2] - bounds[0]
         text_height = CONFIG["text"]["font_size"] if not bounds else bounds[3] - bounds[1]
+        font = tkfont.Font(
+            root=self.window,
+            family=CONFIG["text"]["font_family"],
+            size=CONFIG["text"]["font_size"],
+        )
+        line_height = font.metrics("linespace")
+        line_count = max(1, self.text_buffer.count("\n") + 1)
+        text_height = max(text_height, line_count * line_height)
         self.canvas.coords(
             self.text_box_id,
             x - 5, y - 4,
             x + max(160, text_width + 12),
             y + max(CONFIG["text"]["font_size"] + 10, text_height + 10),
         )
+        insert_index = self.text_input.index("insert") if self.text_input is not None else "1.0"
+        line_number, column = (int(part) for part in insert_index.split("."))
+        line_before_caret = ""
+        if self.text_input is not None:
+            line_before_caret = self.text_input.get(f"{line_number}.0", f"{line_number}.{column}")
+        caret_x = x + font.measure(line_before_caret)
+        caret_y = y + (line_number - 1) * line_height
+        self.canvas.coords(
+            self.text_caret_id,
+            caret_x, caret_y + 2,
+            caret_x, caret_y + line_height,
+        )
+        self.canvas.tag_raise(self.text_box_id)
+        self.canvas.tag_raise(self.text_preview_id)
+        self.canvas.tag_raise(self.text_caret_id)
         self.raise_selection_controls()
 
-    def on_text_key(self, event):
-        if not self.text_editing:
+    def on_text_change(self, _event=None):
+        if not self.text_editing or self.text_input is None:
             return
-        if event.keysym == "BackSpace":
-            self.text_buffer = self.text_buffer[:-1]
-        elif event.char and event.char.isprintable() and not (event.state & 0x000C):
-            self.text_buffer += event.char
-        else:
-            return "break"
+        if not self.text_input.edit_modified():
+            return
+        self.text_buffer = self.text_input.get("1.0", "end-1c")
         self.update_text_editor()
+        self.text_input.edit_modified(False)
+
+    def update_text_cursor(self, _event=None):
+        if self.text_editing:
+            self.update_text_editor()
+
+    def on_text_return(self, event):
+        if event.state & 0x0004:
+            return self.commit_text()
+        if self.text_input is not None:
+            self.text_input.insert("insert", "\n")
         return "break"
 
     def commit_text(self, _event=None):
@@ -822,20 +916,29 @@ class RectSelector:
                 fill=self.ANNOTATION_COLOR,
                 font=self.text_font(),
                 anchor="nw",
+                tags=("annotation",),
             )
             self.raise_selection_controls()
         return "break"
 
     def cancel_text(self, _event=None):
+        if self.text_input is not None:
+            self.text_input.destroy()
         if self.text_box_id is not None:
             self.canvas.delete(self.text_box_id)
         if self.text_preview_id is not None:
             self.canvas.delete(self.text_preview_id)
+        if self.text_caret_id is not None:
+            self.canvas.delete(self.text_caret_id)
         self.text_editing = False
         self.text_buffer = ""
         self.text_box_id = None
         self.text_preview_id = None
+        self.text_caret_id = None
+        self.text_input = None
         self.text_origin = None
+        if self.canvas.winfo_exists():
+            self.canvas.focus_force()
         return "break"
 
     def update_annotation_preview(self, event):
