@@ -91,3 +91,9 @@ Supported selector combinations use `Ctrl`, `Shift`, or `Alt` with
 Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
+
+## License
+
+Infershot is released under the [MIT License](LICENSE). You may use, modify,
+distribute, sublicense, or sell copies of the software while preserving the
+license and copyright notice.
