@@ -1,13 +1,13 @@
 # Changelog
 
-## 1.2.1
+## 1.3
 
 - Fixed text entry by routing keyboard and IME input through a native multiline editor.
 - Kept the visible text editor transparent with a border-only frame and red caret.
 - Made `Enter` insert a newline and `Ctrl+Enter` commit the text annotation.
 - Added a final eraser button that clears all annotations while preserving the capture selection.
 
-## 1.2.0
+## 1.2
 
 - Added visual QA annotations inside rectangle captures.
 - Added a two-click straight red line for underlining or marking an area.
@@ -21,12 +21,12 @@
 - Made the annotation font family and size configurable, defaulting to Palatino Linotype at 24 px.
 - Fixed selection resize handles, including resizing after annotations are added.
 
-## 1.1.0
+## 1.1
 
 - Added two capture modes: full monitor and selectable rectangle.
 - Added moving and resizing for the rectangle selection.
 
-## 1.0.0
+## 1.0
 
 - Added basic numbered screenshot capture and file saving.
 - Added optional clipboard copy.
