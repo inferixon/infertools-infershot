@@ -1,0 +1,17 @@
+{
+  "save_path": "C:\\SCREENSHOTS",
+  "format": "jpg",
+  "quality": 95,
+  "filename_mask": "ScreenShot-{nnn}",
+  "copy_to_clipboard": true,
+  "hotkeys": {
+    "rectangle": "PrintScreen",
+    "fullscreen": "Ctrl+PrintScreen",
+    "line_start": "Ctrl+LeftMouse",
+    "line_finish": "LeftMouse",
+    "arrow_start": "Ctrl+RightMouse",
+    "arrow_finish": "RightMouse",
+    "save": "Enter",
+    "cancel": "Escape"
+  }
+}
