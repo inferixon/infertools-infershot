@@ -7,7 +7,7 @@
 - Added a two-click red arrow whose second point defines the arrow tip.
 - Made capture and annotation hotkeys configurable.
 - Made `Escape` cancel an unfinished annotation before cancelling the capture.
-- Added a semi-transparent toolbar with line, arrow, freehand, and text tools.
+- Added floating translucent line, arrow, freehand, and text buttons with a subtle hover glow.
 - Fixed selection resize handles, including resizing after annotations are added.
 
 ## 1.1.0

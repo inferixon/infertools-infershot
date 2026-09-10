@@ -381,7 +381,6 @@ class RectSelector:
     TOOLBAR_TOOLS = ("line", "arrow", "freehand", "text")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 4
-    TOOLBAR_PAD = 6
     TOOLBAR_MARGIN = 8
     TEXT_SIZE = 22
 
@@ -409,6 +408,7 @@ class RectSelector:
         self.pending_annotation = None
         self.pending_annotation_id = None
         self.active_tool = None
+        self.hover_tool = None
         self.toolbar_hitboxes = []
         self.freehand_points = None
         self.freehand_id = None
@@ -501,7 +501,11 @@ class RectSelector:
         if self.text_entry is not None and event.widget is self.text_entry:
             return
         self.update_annotation_preview(event)
-        if self.toolbar_tool_at(event.x, event.y):
+        hover_tool = self.toolbar_tool_at(event.x, event.y)
+        if hover_tool != self.hover_tool:
+            self.hover_tool = hover_tool
+            self.draw_toolbar()
+        if hover_tool:
             cursor = "hand2"
         else:
             mode = self.hit_test(event.x, event.y)
@@ -592,8 +596,8 @@ class RectSelector:
 
         left, top, right, bottom = rect
         count = len(self.TOOLBAR_TOOLS)
-        width = self.TOOLBAR_PAD * 2 + count * self.TOOLBAR_BUTTON + (count - 1) * self.TOOLBAR_GAP
-        height = self.TOOLBAR_PAD * 2 + self.TOOLBAR_BUTTON
+        width = count * self.TOOLBAR_BUTTON + (count - 1) * self.TOOLBAR_GAP
+        height = self.TOOLBAR_BUTTON
         x = max(0, min(self.width - width, left))
         if top >= height + self.TOOLBAR_MARGIN:
             y = top - height - self.TOOLBAR_MARGIN
@@ -602,29 +606,30 @@ class RectSelector:
         else:
             y = max(0, min(self.height - height, top + self.TOOLBAR_MARGIN))
 
-        self.canvas.create_rectangle(
-            x, y, x + width, y + height,
-            fill="#111827", outline="#7b8492", width=1,
-            stipple="gray50", tags=("toolbar",),
-        )
         for index, tool in enumerate(self.TOOLBAR_TOOLS):
-            bx1 = x + self.TOOLBAR_PAD + index * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
-            by1 = y + self.TOOLBAR_PAD
+            bx1 = x + index * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
+            by1 = y
             bx2 = bx1 + self.TOOLBAR_BUTTON
             by2 = by1 + self.TOOLBAR_BUTTON
             selected = tool == self.active_tool
+            hovered = tool == self.hover_tool
+            if hovered:
+                self.canvas.create_rectangle(
+                    bx1 - 2, by1 - 2, bx2 + 2, by2 + 2,
+                    outline="#71313a", width=2, tags=("toolbar",),
+                )
             self.canvas.create_rectangle(
                 bx1, by1, bx2, by2,
-                fill="#7f1d1d" if selected else "#27303b",
-                outline="#ff5a5a" if selected else "#657080",
-                stipple="gray50", tags=("toolbar",),
+                fill="#5b1820" if selected else "#111827",
+                outline="#ff666f" if selected else ("#a9515b" if hovered else "#56606d"),
+                width=1, stipple="gray25", tags=("toolbar",),
             )
-            self.draw_toolbar_icon(tool, bx1, by1, bx2, by2, selected)
+            self.draw_toolbar_icon(tool, bx1, by1, bx2, by2, selected, hovered)
             self.toolbar_hitboxes.append((bx1, by1, bx2, by2, tool))
         self.canvas.tag_raise("toolbar")
 
-    def draw_toolbar_icon(self, tool, left, top, right, bottom, selected):
-        color = "#ffffff" if selected else "#c7ced8"
+    def draw_toolbar_icon(self, tool, left, top, right, bottom, selected, hovered):
+        color = "#ffe4e6" if selected else ("#eef2f7" if hovered else "#aab2bd")
         cx = (left + right) / 2
         cy = (top + bottom) / 2
         tags = ("toolbar",)
