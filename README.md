@@ -68,8 +68,8 @@ but not finished, `Escape` removes only that pending annotation. With no pending
 annotation, `Escape` cancels the capture.
 
 After selecting a rectangle, use the floating buttons above its left edge. The
-button group has no panel; each button uses a faint border and fill with a subtle
-hover glow:
+button group has no panel; each rounded button uses a faint border, a translucent
+fill, wider spacing, and a subtle white hover glow:
 
 - Line – click the start and end points.
 - Arrow – click the start point, then the arrow tip.

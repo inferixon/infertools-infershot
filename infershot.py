@@ -380,7 +380,8 @@ class RectSelector:
     ARROW_HEAD_ANGLE = math.radians(28)
     TOOLBAR_TOOLS = ("line", "arrow", "freehand", "text")
     TOOLBAR_BUTTON = 34
-    TOOLBAR_GAP = 4
+    TOOLBAR_GAP = 8
+    TOOLBAR_RADIUS = 8
     TOOLBAR_MARGIN = 8
     TEXT_SIZE = 22
 
@@ -587,6 +588,24 @@ class RectSelector:
         self.draw_toolbar()
         log(f"toolbar tool={self.active_tool or 'none'}")
 
+    def create_rounded_rect(self, left, top, right, bottom, radius, **options):
+        radius = max(1, min(radius, (right - left) / 2, (bottom - top) / 2))
+        points = (
+            left + radius, top,
+            right - radius, top,
+            right, top,
+            right, top + radius,
+            right, bottom - radius,
+            right, bottom,
+            right - radius, bottom,
+            left + radius, bottom,
+            left, bottom,
+            left, bottom - radius,
+            left, top + radius,
+            left, top,
+        )
+        return self.canvas.create_polygon(points, smooth=True, splinesteps=24, **options)
+
     def draw_toolbar(self):
         self.canvas.delete("toolbar")
         self.toolbar_hitboxes = []
@@ -614,14 +633,18 @@ class RectSelector:
             selected = tool == self.active_tool
             hovered = tool == self.hover_tool
             if hovered:
-                self.canvas.create_rectangle(
-                    bx1 - 2, by1 - 2, bx2 + 2, by2 + 2,
-                    outline="#71313a", width=2, tags=("toolbar",),
+                self.create_rounded_rect(
+                    bx1 - 4, by1 - 4, bx2 + 4, by2 + 4, self.TOOLBAR_RADIUS + 4,
+                    fill="", outline="#555b65", width=3, tags=("toolbar",),
                 )
-            self.canvas.create_rectangle(
-                bx1, by1, bx2, by2,
+                self.create_rounded_rect(
+                    bx1 - 2, by1 - 2, bx2 + 2, by2 + 2, self.TOOLBAR_RADIUS + 2,
+                    fill="", outline="#d8dde6", width=1, tags=("toolbar",),
+                )
+            self.create_rounded_rect(
+                bx1, by1, bx2, by2, self.TOOLBAR_RADIUS,
                 fill="#5b1820" if selected else "#111827",
-                outline="#ff666f" if selected else ("#a9515b" if hovered else "#56606d"),
+                outline="#ff666f" if selected else ("#f4f7fb" if hovered else "#56606d"),
                 width=1, stipple="gray25", tags=("toolbar",),
             )
             self.draw_toolbar_icon(tool, bx1, by1, bx2, by2, selected, hovered)
