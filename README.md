@@ -95,7 +95,7 @@ Resize handles always remain available, including after annotations are added.
   "copy_to_clipboard": true,
   "text": {
     "font_family": "Palatino Linotype",
-    "font_size": 22
+    "font_size": 24
   },
   "hotkeys": {
     "rectangle": "PrintScreen",
@@ -115,7 +115,7 @@ Supported selector combinations use `Ctrl`, `Shift`, or `Alt` with
 Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
-The default annotation font is Palatino Linotype at 22 px. Font size is clamped
+The default annotation font is Palatino Linotype at 24 px. Font size is clamped
 to the supported range of 8–96 px.
 
 ## License

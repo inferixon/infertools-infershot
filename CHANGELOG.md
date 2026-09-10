@@ -11,7 +11,7 @@
 - Reordered the toolbar to freehand, line, arrow, rectangle, and text.
 - Added drag-to-draw red rectangle annotations.
 - Replaced the opaque text field with a transparent, border-only canvas editor.
-- Made the annotation font family and size configurable, defaulting to Palatino Linotype at 22 px.
+- Made the annotation font family and size configurable, defaulting to Palatino Linotype at 24 px.
 - Fixed selection resize handles, including resizing after annotations are added.
 
 ## 1.1.0

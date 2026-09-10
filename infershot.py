@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "copy_to_clipboard": True,
     "text": {
         "font_family": "Palatino Linotype",
-        "font_size": 22
+        "font_size": 24
     },
     "hotkeys": {
         "rectangle": "PrintScreen",
