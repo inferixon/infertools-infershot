@@ -4,6 +4,8 @@ Infershot is a lightweight Windows screenshot tool for fast capture and visual Q
 It runs in the background, saves numbered screenshots, copies them to the clipboard,
 and adds straight red lines or arrows before saving a selected region.
 
+![Infershot highlighting two JavaScript bugs with a red underline and arrow](assets/infershot-qa-demo.png)
+
 ## Features
 
 - Rectangle capture across the Windows virtual desktop
