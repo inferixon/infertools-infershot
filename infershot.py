@@ -425,7 +425,7 @@ class RectSelector:
         self.bind_hotkey("arrow_start", self.on_arrow_click)
         self.bind_hotkey("arrow_finish", self.on_arrow_finish)
         self.bind_hotkey("save", self.save)
-        self.bind_hotkey("cancel", self.cancel)
+        self.bind_hotkey("cancel", self.on_cancel)
         self.window.bind("<Motion>", self.on_motion)
         self.draw_rect()
 
@@ -665,6 +665,18 @@ class RectSelector:
         path = save_capture(image)
         print(f"Saved rectangle: {path}", flush=True)
         self.window.destroy()
+
+    def on_cancel(self, _event=None):
+        if self.pending_annotation is not None:
+            if self.pending_annotation_id is not None:
+                self.canvas.delete(self.pending_annotation_id)
+            self.pending_annotation = None
+            self.pending_annotation_id = None
+            self.canvas.configure(cursor="crosshair")
+            log("pending annotation cancelled")
+            return "break"
+        self.cancel()
+        return "break"
 
     def cancel(self, _event=None):
         self.window.destroy()

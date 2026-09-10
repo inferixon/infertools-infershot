@@ -6,6 +6,7 @@
 - Added a two-click straight red line for underlining or marking an area.
 - Added a two-click red arrow whose second point defines the arrow tip.
 - Made capture and annotation hotkeys configurable.
+- Made `Escape` cancel an unfinished annotation before cancelling the capture.
 
 ## 1.1.0
 

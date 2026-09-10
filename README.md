@@ -57,12 +57,14 @@ Stop the background process with:
 | Start a red arrow | `Ctrl+RightMouse` |
 | Finish the active arrow | `RightMouse` |
 | Save the selected capture | `Enter` |
-| Cancel the capture | `Escape` |
+| Cancel the pending annotation or capture | `Escape` |
 
 For a rectangle capture, drag with the left mouse button. Before adding an
 annotation, the selection can be moved from its interior or resized with its handles.
 The second arrow click marks the arrow tip. Completed annotations are included in
-both the saved image and the clipboard image.
+both the saved image and the clipboard image. If a line or arrow has been started
+but not finished, `Escape` removes only that pending annotation. With no pending
+annotation, `Escape` cancels the capture.
 
 ## Configuration
 
