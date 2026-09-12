@@ -425,6 +425,9 @@ class RectSelector:
         self.toolbar_hitboxes = []
         self.freehand_points = None
         self.freehand_id = None
+        self.cross_center = None
+        self.cross_size = None
+        self.cross_ids = []
         self.text_editing = False
         self.text_buffer = ""
         self.text_box_id = None
@@ -721,21 +724,45 @@ class RectSelector:
                 fill=color, width=2, tags=tags,
             )
 
-    def place_cross(self, x, y):
+    def start_cross(self, x, y):
         left, top, right, bottom = self.normalized_rect()
         size = CONFIG["cross"]["size"]
         half = min(size / 2, (right - left) / 2, (bottom - top) / 2)
         x = max(left + half, min(right - half, x))
         y = max(top + half, min(bottom - half, y))
-        self.annotations.append({"kind": "cross", "center": (x, y), "size": half * 2})
+        self.cross_center = (x, y)
+        self.cross_size = half * 2
         options = {
             "fill": self.ANNOTATION_COLOR,
             "width": self.ANNOTATION_WIDTH,
             "capstyle": tk.ROUND,
             "tags": ("annotation",),
         }
-        self.canvas.create_line(x - half, y - half, x + half, y + half, **options)
-        self.canvas.create_line(x + half, y - half, x - half, y + half, **options)
+        self.cross_ids = [
+            self.canvas.create_line(x - half, y - half, x + half, y + half, **options),
+            self.canvas.create_line(x + half, y - half, x - half, y + half, **options),
+        ]
+        self.raise_selection_controls()
+
+    def extend_cross(self, x, y):
+        if self.cross_center is None or len(self.cross_ids) != 2:
+            return
+        left, top, right, bottom = self.normalized_rect()
+        cx, cy = self.cross_center
+        max_half = min(128, cx - left, right - cx, cy - top, bottom - cy)
+        half = min(max_half, max(8, max(abs(x - cx), abs(y - cy))))
+        self.cross_size = half * 2
+        self.canvas.coords(self.cross_ids[0], cx - half, cy - half, cx + half, cy + half)
+        self.canvas.coords(self.cross_ids[1], cx + half, cy - half, cx - half, cy + half)
+        self.raise_selection_controls()
+
+    def finish_cross(self):
+        if self.cross_center is None:
+            return
+        self.annotations.append({"kind": "cross", "center": self.cross_center, "size": self.cross_size})
+        self.cross_center = None
+        self.cross_size = None
+        self.cross_ids = []
         self.raise_selection_controls()
 
     def start_freehand(self, x, y):
@@ -1003,7 +1030,7 @@ class RectSelector:
             self.start_rectangle(x, y)
             return "break"
         if self.active_tool == "cross" and self.point_in_selection(x, y):
-            self.place_cross(x, y)
+            self.start_cross(x, y)
             return "break"
         if self.active_tool == "text" and self.point_in_selection(x, y):
             self.start_text(x, y)
@@ -1026,6 +1053,9 @@ class RectSelector:
             start = self.pending_annotation["start"]
             self.canvas.coords(self.pending_annotation_id, *start, x, y)
             self.raise_selection_controls()
+            return
+        if self.cross_center is not None:
+            self.extend_cross(x, y)
             return
         if self.freehand_points is not None:
             self.extend_freehand(x, y)
@@ -1066,6 +1096,9 @@ class RectSelector:
                 x = max(left, min(right, x))
                 y = max(top, min(bottom, y))
             self.finish_rectangle(x, y)
+            return
+        if self.cross_center is not None:
+            self.finish_cross()
             return
         if self.freehand_points is not None:
             self.finish_freehand()
@@ -1200,6 +1233,13 @@ class RectSelector:
                 self.canvas.delete(self.freehand_id)
             self.freehand_points = None
             self.freehand_id = None
+            discarded = True
+        if self.cross_center is not None:
+            for item_id in self.cross_ids:
+                self.canvas.delete(item_id)
+            self.cross_center = None
+            self.cross_size = None
+            self.cross_ids = []
             discarded = True
         if self.text_editing:
             self.cancel_text()

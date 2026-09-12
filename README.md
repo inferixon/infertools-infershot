@@ -75,7 +75,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Line – click the start and end points.
 - Arrow – click the start point, then the arrow tip.
 - Rectangle – hold and drag the left mouse button to frame an area.
-- Cross – click once to place a large red X.
+- Cross – click once for the configured size, or hold and drag to resize the red X.
 - Text – click inside the selection and type inside a transparent, border-only
   editor. `Enter` starts a new line, `Ctrl+Enter` commits the text, and `Escape`
   cancels the active text editor.
@@ -122,8 +122,8 @@ Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
 The default annotation font is Palatino Linotype at 24 px. Font size is clamped
-to the supported range of 8–96 px. Cross size defaults to 48 px and is clamped
-to 16–256 px.
+to the supported range of 8–96 px. A short cross click uses the configured 48 px
+default; hold and drag for a live size from 16–256 px.
 
 ## License
 
