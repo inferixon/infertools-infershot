@@ -4,14 +4,14 @@ Infershot is a lightweight Windows screenshot tool for fast capture and visual Q
 It runs in the background, saves numbered screenshots, copies them to the clipboard,
 and adds straight red lines or arrows before saving a selected region.
 
-![Infershot toolbar highlighting two JavaScript bugs with line, arrow, rectangle, freehand, and text annotations](assets/infershot-qa-demo.png)
+![Infershot toolbar highlighting two JavaScript bugs with line, arrow, rectangle, freehand, cross, and text annotations](assets/infershot-qa-demo.png)
 
 ## Features
 
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Floating translucent buttons for freehand, line, arrow, rectangle, text, and eraser tools
+- Floating translucent buttons for freehand, line, arrow, rectangle, cross, text, and eraser tools
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -75,6 +75,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Line – click the start and end points.
 - Arrow – click the start point, then the arrow tip.
 - Rectangle – hold and drag the left mouse button to frame an area.
+- Cross – click once to place a large red X.
 - Text – click inside the selection and type inside a transparent, border-only
   editor. `Enter` starts a new line, `Ctrl+Enter` commits the text, and `Escape`
   cancels the active text editor.
@@ -99,6 +100,9 @@ Resize handles always remain available, including after annotations are added.
     "font_family": "Palatino Linotype",
     "font_size": 24
   },
+  "cross": {
+    "size": 48
+  },
   "hotkeys": {
     "rectangle": "PrintScreen",
     "fullscreen": "Ctrl+PrintScreen",
@@ -118,7 +122,8 @@ Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
 The default annotation font is Palatino Linotype at 24 px. Font size is clamped
-to the supported range of 8–96 px.
+to the supported range of 8–96 px. Cross size defaults to 48 px and is clamped
+to 16–256 px.
 
 ## License
 

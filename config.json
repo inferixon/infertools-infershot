@@ -8,6 +8,9 @@
     "font_family": "Palatino Linotype",
     "font_size": 24
   },
+  "cross": {
+    "size": 48
+  },
   "hotkeys": {
     "rectangle": "PrintScreen",
     "fullscreen": "Ctrl+PrintScreen",

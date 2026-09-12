@@ -31,6 +31,9 @@ DEFAULT_CONFIG = {
         "font_family": "Palatino Linotype",
         "font_size": 24
     },
+    "cross": {
+        "size": 48
+    },
     "hotkeys": {
         "rectangle": "PrintScreen",
         "fullscreen": "Ctrl+PrintScreen",
@@ -156,6 +159,7 @@ def load_config():
     config = DEFAULT_CONFIG | raw
     config["hotkeys"] = DEFAULT_CONFIG["hotkeys"] | raw.get("hotkeys", {})
     config["text"] = DEFAULT_CONFIG["text"] | raw.get("text", {})
+    config["cross"] = DEFAULT_CONFIG["cross"] | raw.get("cross", {})
     config["format"] = str(config["format"]).lower().lstrip(".")
     if config["format"] == "jpeg":
         config["format"] = "jpg"
@@ -163,6 +167,7 @@ def load_config():
     config["copy_to_clipboard"] = bool(config["copy_to_clipboard"])
     config["text"]["font_family"] = str(config["text"]["font_family"]).strip() or DEFAULT_CONFIG["text"]["font_family"]
     config["text"]["font_size"] = max(8, min(96, int(config["text"]["font_size"])))
+    config["cross"]["size"] = max(16, min(256, int(config["cross"]["size"])))
     return config
 
 
@@ -386,7 +391,7 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "text", "eraser")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "cross", "text", "eraser")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
@@ -698,6 +703,9 @@ class RectSelector:
                 right - 10, cy - 6, right - 6, cy,
                 fill=color, width=3, smooth=True, tags=tags,
             )
+        elif tool == "cross":
+            self.canvas.create_line(left + 9, top + 9, right - 9, bottom - 9, fill=color, width=3, tags=tags)
+            self.canvas.create_line(right - 9, top + 9, left + 9, bottom - 9, fill=color, width=3, tags=tags)
         elif tool == "text":
             self.canvas.create_text(cx, cy, text="T", fill=color, font=("Segoe UI", 18, "bold"), tags=tags)
         else:
@@ -712,6 +720,23 @@ class RectSelector:
                 left + 10, bottom - 10, right - 15, bottom - 6,
                 fill=color, width=2, tags=tags,
             )
+
+    def place_cross(self, x, y):
+        left, top, right, bottom = self.normalized_rect()
+        size = CONFIG["cross"]["size"]
+        half = min(size / 2, (right - left) / 2, (bottom - top) / 2)
+        x = max(left + half, min(right - half, x))
+        y = max(top + half, min(bottom - half, y))
+        self.annotations.append({"kind": "cross", "center": (x, y), "size": half * 2})
+        options = {
+            "fill": self.ANNOTATION_COLOR,
+            "width": self.ANNOTATION_WIDTH,
+            "capstyle": tk.ROUND,
+            "tags": ("annotation",),
+        }
+        self.canvas.create_line(x - half, y - half, x + half, y + half, **options)
+        self.canvas.create_line(x + half, y - half, x - half, y + half, **options)
+        self.raise_selection_controls()
 
     def start_freehand(self, x, y):
         self.freehand_points = [(x, y)]
@@ -977,6 +1002,9 @@ class RectSelector:
         if self.active_tool == "rectangle" and self.point_in_selection(x, y):
             self.start_rectangle(x, y)
             return "break"
+        if self.active_tool == "cross" and self.point_in_selection(x, y):
+            self.place_cross(x, y)
+            return "break"
         if self.active_tool == "text" and self.point_in_selection(x, y):
             self.start_text(x, y)
             return "break"
@@ -1090,6 +1118,20 @@ class RectSelector:
                 x, y = annotation["start"]
                 font = self.image_text_font()
                 draw.text((x - left, y - top), annotation["text"], fill=self.ANNOTATION_COLOR, font=font)
+                continue
+            if kind == "cross":
+                x, y = annotation["center"]
+                half = annotation["size"] / 2
+                draw.line(
+                    (x - left - half, y - top - half, x - left + half, y - top + half),
+                    fill=self.ANNOTATION_COLOR,
+                    width=self.ANNOTATION_WIDTH,
+                )
+                draw.line(
+                    (x - left + half, y - top - half, x - left - half, y - top + half),
+                    fill=self.ANNOTATION_COLOR,
+                    width=self.ANNOTATION_WIDTH,
+                )
                 continue
             if kind == "rectangle":
                 sx, sy = annotation["start"]

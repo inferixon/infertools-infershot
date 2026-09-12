@@ -3,8 +3,7 @@
 ## 1.2
 
 - Added a floating annotation toolbar.
-- Added freehand, line, arrow, rectangle, and multiline text tools.
-- Added an eraser that clears annotations without closing the selection.
+- Added freehand, line, arrow, rectangle, cross, multiline text, eraser.
 
 ## 1.1
 
