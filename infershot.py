@@ -881,11 +881,18 @@ class RectSelector:
         self.text_input.focus_force()
 
     def text_font(self):
-        return CONFIG["text"]["font_family"], -CONFIG["text"]["font_size"]
+        return CONFIG["text"]["font_family"], CONFIG["text"]["font_size"]
+
+    def text_pixel_size(self):
+        try:
+            scaling = float(self.window.tk.call("tk", "scaling"))
+        except (AttributeError, tk.TclError):
+            scaling = 96 / 72
+        return max(1, round(CONFIG["text"]["font_size"] * scaling))
 
     def image_text_font(self):
         family = CONFIG["text"]["font_family"]
-        size = CONFIG["text"]["font_size"]
+        size = self.text_pixel_size()
         font_files = {
             "palatino linotype": "pala.ttf",
             "segoe ui": "segoeui.ttf",
@@ -921,7 +928,7 @@ class RectSelector:
         font = tkfont.Font(
             root=self.window,
             family=CONFIG["text"]["font_family"],
-            size=-CONFIG["text"]["font_size"],
+            size=CONFIG["text"]["font_size"],
         )
         line_height = font.metrics("linespace")
         line_count = max(1, self.text_buffer.count("\n") + 1)

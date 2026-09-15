@@ -12,7 +12,7 @@ and adds straight red lines or arrows before saving a selected region.
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
 - Floating translucent buttons for freehand, line, arrow, rectangle, cross, text, and eraser tools
-- Pixel-sized text preview with a live keyboard layout and Caps Lock indicator
+- DPI-matched text preview with a live keyboard layout and Caps Lock indicator
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -123,9 +123,9 @@ Supported selector combinations use `Ctrl`, `Shift`, or `Alt` with
 Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
-The default annotation font is Palatino Linotype at 24 px. Font size is clamped
-to the supported range of 8–96 px. A short cross click uses the configured 48 px
-default; hold and drag for a live size from 16–256 px.
+The default annotation font is Palatino Linotype at 24 points. Font size is
+clamped to 8–96 points and DPI-matched in the saved image. A short cross click
+uses the configured 48 px default; hold and drag for a live size from 16–256 px.
 
 ## License
 
