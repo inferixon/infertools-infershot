@@ -4,6 +4,7 @@
 
 - Added a floating annotation toolbar.
 - Added freehand, line, arrow, rectangle, cross, multiline text, eraser.
+- Added pixel-matched text preview with live layout and Caps Lock status.
 
 ## 1.1
 

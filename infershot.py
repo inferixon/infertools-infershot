@@ -50,6 +50,7 @@ CONFIG = {}
 FILE_RE = None
 
 VK_CONTROL = 0x11
+VK_CAPITAL = 0x14
 VK_LCONTROL = 0xA2
 VK_RCONTROL = 0xA3
 VK_SHIFT = 0x10
@@ -129,6 +130,10 @@ user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
 user32.SetClipboardData.restype = wintypes.HANDLE
 user32.CloseClipboard.argtypes = []
 user32.CloseClipboard.restype = wintypes.BOOL
+user32.GetKeyboardLayout.argtypes = [wintypes.DWORD]
+user32.GetKeyboardLayout.restype = wintypes.HANDLE
+user32.GetKeyState.argtypes = [ctypes.c_int]
+user32.GetKeyState.restype = wintypes.SHORT
 kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
 kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
 kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
@@ -433,6 +438,8 @@ class RectSelector:
         self.text_box_id = None
         self.text_preview_id = None
         self.text_caret_id = None
+        self.text_status_id = None
+        self.text_status_after_id = None
         self.text_input = None
         self.text_origin = None
 
@@ -862,11 +869,19 @@ class RectSelector:
             fill=self.ANNOTATION_COLOR,
             width=2,
         )
+        self.text_status_id = self.canvas.create_text(
+            x, y - 8,
+            text="",
+            fill="#ff9a9f",
+            font=("Segoe UI", -11, "bold"),
+            anchor="sw",
+        )
         self.update_text_editor()
+        self.update_text_input_status()
         self.text_input.focus_force()
 
     def text_font(self):
-        return CONFIG["text"]["font_family"], CONFIG["text"]["font_size"]
+        return CONFIG["text"]["font_family"], -CONFIG["text"]["font_size"]
 
     def image_text_font(self):
         family = CONFIG["text"]["font_family"]
@@ -906,7 +921,7 @@ class RectSelector:
         font = tkfont.Font(
             root=self.window,
             family=CONFIG["text"]["font_family"],
-            size=CONFIG["text"]["font_size"],
+            size=-CONFIG["text"]["font_size"],
         )
         line_height = font.metrics("linespace")
         line_count = max(1, self.text_buffer.count("\n") + 1)
@@ -933,6 +948,26 @@ class RectSelector:
         self.canvas.tag_raise(self.text_preview_id)
         self.canvas.tag_raise(self.text_caret_id)
         self.raise_selection_controls()
+
+    def text_input_status(self):
+        language_id = int(user32.GetKeyboardLayout(0)) & 0xFFFF
+        primary_language = language_id & 0x03FF
+        language = {
+            0x09: "EN",
+            0x14: "NO",
+            0x22: "UA",
+        }.get(primary_language, f"{language_id:04X}")
+        if user32.GetKeyState(VK_CAPITAL) & 1:
+            return f"{language} · CAPS"
+        return language
+
+    def update_text_input_status(self):
+        if not self.text_editing or self.text_status_id is None:
+            return
+        self.canvas.itemconfigure(self.text_status_id, text=self.text_input_status())
+        self.canvas.tag_raise(self.text_status_id)
+        self.raise_selection_controls()
+        self.text_status_after_id = self.window.after(120, self.update_text_input_status)
 
     def on_text_change(self, _event=None):
         if not self.text_editing or self.text_input is None:
@@ -974,6 +1009,12 @@ class RectSelector:
         return "break"
 
     def cancel_text(self, _event=None):
+        if self.text_status_after_id is not None:
+            try:
+                self.window.after_cancel(self.text_status_after_id)
+            except tk.TclError:
+                pass
+            self.text_status_after_id = None
         if self.text_input is not None:
             self.text_input.destroy()
         if self.text_box_id is not None:
@@ -982,11 +1023,14 @@ class RectSelector:
             self.canvas.delete(self.text_preview_id)
         if self.text_caret_id is not None:
             self.canvas.delete(self.text_caret_id)
+        if self.text_status_id is not None:
+            self.canvas.delete(self.text_status_id)
         self.text_editing = False
         self.text_buffer = ""
         self.text_box_id = None
         self.text_preview_id = None
         self.text_caret_id = None
+        self.text_status_id = None
         self.text_input = None
         self.text_origin = None
         if self.canvas.winfo_exists():

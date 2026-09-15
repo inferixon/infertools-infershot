@@ -12,6 +12,7 @@ and adds straight red lines or arrows before saving a selected region.
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
 - Floating translucent buttons for freehand, line, arrow, rectangle, cross, text, and eraser tools
+- Pixel-sized text preview with a live keyboard layout and Caps Lock indicator
 - Two-click red line and arrow annotations
 - Automatic numbered filenames
 - Optional clipboard copy
@@ -77,8 +78,9 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Rectangle – hold and drag the left mouse button to frame an area.
 - Cross – click once for the configured size, or hold and drag to resize the red X.
 - Text – click inside the selection and type inside a transparent, border-only
-  editor. `Enter` starts a new line, `Ctrl+Enter` commits the text, and `Escape`
-  cancels the active text editor.
+  editor. A compact status shows the active `EN`, `NO`, or `UA` layout and Caps
+  Lock state. `Enter` starts a new line, `Ctrl+Enter` commits the text, and
+  `Escape` cancels the active text editor.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
 
