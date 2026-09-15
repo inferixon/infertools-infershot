@@ -1332,10 +1332,7 @@ class InfershotApp:
                         now = time.monotonic()
                         if now - self.last_key_time > 0.35:
                             self.last_key_time = now
-                            if hotkey_matches("fullscreen", modifiers):
-                                self.tasks.put("monitor")
-                            elif hotkey_matches("rectangle", modifiers):
-                                self.tasks.put("rectangle")
+                            self.tasks.put(("printscreen", modifiers))
                     if w_param in (WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP):
                         return 1
         except Exception as error:
@@ -1347,6 +1344,19 @@ class InfershotApp:
             while True:
                 task = self.tasks.get_nowait()
                 log(f"task {task}")
+                if isinstance(task, tuple) and task[0] == "printscreen":
+                    try:
+                        apply_config()
+                    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+                        log(f"config reload failed: {error!r}")
+                        continue
+                    modifiers = task[1]
+                    if hotkey_matches("fullscreen", modifiers):
+                        task = "monitor"
+                    elif hotkey_matches("rectangle", modifiers):
+                        task = "rectangle"
+                    else:
+                        continue
                 if task == "monitor":
                     threading.Thread(target=capture_monitor, daemon=True).start()
                 elif task == "rectangle" and not self.selector_open:

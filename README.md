@@ -89,7 +89,7 @@ Resize handles always remain available, including after annotations are added.
 
 ## Configuration
 
-`config.json` is loaded when Infershot starts. Restart the application after edits.
+`config.json` is reloaded on every `PrintScreen` invocation, so edits apply without restarting Infershot.
 
 ```json
 {

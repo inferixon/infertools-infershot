@@ -5,6 +5,7 @@
 - Added a floating annotation toolbar.
 - Added freehand, line, arrow, rectangle, cross, multiline text, eraser.
 - Added DPI-matched text preview with live layout and Caps Lock status.
+- Added live config reload on every PrintScreen invocation.
 
 ## 1.1
 
