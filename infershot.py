@@ -442,6 +442,11 @@ class RectSelector:
         self.text_status_after_id = None
         self.text_input = None
         self.text_origin = None
+        self.text_font_family = None
+        self.text_font_size = None
+        self.text_min_width = 160
+        self.text_drag_origin = None
+        self.text_drag_box_id = None
 
         self.window = tk.Toplevel(root)
         self.window.overrideredirect(True)
@@ -833,9 +838,61 @@ class RectSelector:
         self.pending_annotation_id = None
         self.raise_selection_controls()
 
-    def start_text(self, x, y):
+    def start_text_drag(self, x, y):
+        self.text_drag_origin = (x, y)
+        line_height = self.text_line_height(CONFIG["text"]["font_size"])
+        self.text_drag_box_id = self.canvas.create_rectangle(
+            x - 5, y - 4, x + 160, y + line_height + 6,
+            fill="", outline="#ff7777", width=1,
+        )
+        self.raise_selection_controls()
+
+    def extend_text_drag(self, x, y):
+        if self.text_drag_origin is None or self.text_drag_box_id is None:
+            return
+        rect = self.normalized_rect()
+        if rect:
+            left, top, right, bottom = rect
+            x = max(left, min(right, x))
+            y = max(top, min(bottom, y))
+        sx, sy = self.text_drag_origin
+        self.canvas.coords(self.text_drag_box_id, sx, sy, x, y)
+        self.raise_selection_controls()
+
+    def finish_text_drag(self, x, y):
+        if self.text_drag_origin is None:
+            return
+        rect = self.normalized_rect()
+        if rect:
+            left, top, right, bottom = rect
+            x = max(left, min(right, x))
+            y = max(top, min(bottom, y))
+        sx, sy = self.text_drag_origin
+        if self.text_drag_box_id is not None:
+            self.canvas.delete(self.text_drag_box_id)
+        self.text_drag_origin = None
+        self.text_drag_box_id = None
+        dragged = max(abs(x - sx), abs(y - sy)) >= 4
+        if dragged:
+            origin_x, origin_y = min(sx, x), min(sy, y)
+            font_size = (
+                self.text_size_for_height(abs(y - sy))
+                if abs(y - sy) >= 4
+                else CONFIG["text"]["font_size"]
+            )
+            min_width = max(160, abs(x - sx))
+        else:
+            origin_x, origin_y = sx, sy
+            font_size = CONFIG["text"]["font_size"]
+            min_width = 160
+        self.start_text(origin_x, origin_y, font_size, min_width)
+
+    def start_text(self, x, y, font_size=None, min_width=160):
         self.cancel_text()
         self.text_origin = (x, y)
+        self.text_font_family = CONFIG["text"]["font_family"]
+        self.text_font_size = font_size or CONFIG["text"]["font_size"]
+        self.text_min_width = max(160, int(min_width))
         self.text_editing = True
         self.text_buffer = ""
         self.text_input = tk.Text(
@@ -853,8 +910,9 @@ class RectSelector:
         self.text_input.bind("<KP_Enter>", self.on_text_return)
         self.text_input.bind(selector_binding(CONFIG["hotkeys"]["cancel"]), self.on_cancel, add="+")
         self.text_input.edit_modified(False)
+        line_height = self.text_line_height(self.text_font_size)
         self.text_box_id = self.canvas.create_rectangle(
-            x - 5, y - 4, x + 165, y + CONFIG["text"]["font_size"] + 10,
+            x - 5, y - 4, x + self.text_min_width, y + line_height + 6,
             fill="", outline="#ff7777", width=1,
         )
         self.text_preview_id = self.canvas.create_text(
@@ -865,7 +923,7 @@ class RectSelector:
             anchor="nw",
         )
         self.text_caret_id = self.canvas.create_line(
-            x, y + 2, x, y + CONFIG["text"]["font_size"] + 2,
+            x, y + 2, x, y + line_height,
             fill=self.ANNOTATION_COLOR,
             width=2,
         )
@@ -880,19 +938,32 @@ class RectSelector:
         self.update_text_input_status()
         self.text_input.focus_force()
 
-    def text_font(self):
-        return CONFIG["text"]["font_family"], CONFIG["text"]["font_size"]
+    def text_font(self, family=None, size=None):
+        return (
+            family or self.text_font_family or CONFIG["text"]["font_family"],
+            size or self.text_font_size or CONFIG["text"]["font_size"],
+        )
 
-    def text_pixel_size(self):
+    def text_line_height(self, size):
+        font = tkfont.Font(root=self.window, family=CONFIG["text"]["font_family"], size=size)
+        return font.metrics("linespace")
+
+    def text_size_for_height(self, height):
+        default_size = CONFIG["text"]["font_size"]
+        default_height = self.text_line_height(default_size)
+        content_height = max(1, height - 10)
+        return max(8, min(96, round(default_size * content_height / default_height)))
+
+    def text_pixel_size(self, size=None):
         try:
             scaling = float(self.window.tk.call("tk", "scaling"))
         except (AttributeError, tk.TclError):
             scaling = 96 / 72
-        return max(1, round(CONFIG["text"]["font_size"] * scaling))
+        return max(1, round((size or CONFIG["text"]["font_size"]) * scaling))
 
-    def image_text_font(self):
-        family = CONFIG["text"]["font_family"]
-        size = self.text_pixel_size()
+    def image_text_font(self, family=None, size=None):
+        family = family or CONFIG["text"]["font_family"]
+        size = self.text_pixel_size(size)
         font_files = {
             "palatino linotype": "pala.ttf",
             "segoe ui": "segoeui.ttf",
@@ -924,11 +995,11 @@ class RectSelector:
         bounds = self.canvas.bbox(self.text_preview_id)
         x, y = self.text_origin
         text_width = 0 if not bounds else bounds[2] - bounds[0]
-        text_height = CONFIG["text"]["font_size"] if not bounds else bounds[3] - bounds[1]
+        text_height = self.text_font_size if not bounds else bounds[3] - bounds[1]
         font = tkfont.Font(
             root=self.window,
-            family=CONFIG["text"]["font_family"],
-            size=CONFIG["text"]["font_size"],
+            family=self.text_font_family,
+            size=self.text_font_size,
         )
         line_height = font.metrics("linespace")
         line_count = max(1, self.text_buffer.count("\n") + 1)
@@ -936,8 +1007,8 @@ class RectSelector:
         self.canvas.coords(
             self.text_box_id,
             x - 5, y - 4,
-            x + max(160, text_width + 12),
-            y + max(CONFIG["text"]["font_size"] + 10, text_height + 10),
+            x + max(self.text_min_width, text_width + 12),
+            y + max(line_height + 6, text_height + 10),
         )
         insert_index = self.text_input.index("insert") if self.text_input is not None else "1.0"
         line_number, column = (int(part) for part in insert_index.split("."))
@@ -1001,14 +1072,16 @@ class RectSelector:
             return "break"
         value = self.text_buffer.strip()
         origin = self.text_origin
+        family = self.text_font_family
+        size = self.text_font_size
         self.cancel_text()
         if value:
-            self.annotations.append({"kind": "text", "start": origin, "text": value})
+            self.annotations.append({"kind": "text", "start": origin, "text": value, "font_family": family, "font_size": size})
             self.canvas.create_text(
                 *origin,
                 text=value,
                 fill=self.ANNOTATION_COLOR,
-                font=self.text_font(),
+                font=self.text_font(family, size),
                 anchor="nw",
                 tags=("annotation",),
             )
@@ -1040,6 +1113,9 @@ class RectSelector:
         self.text_status_id = None
         self.text_input = None
         self.text_origin = None
+        self.text_font_family = None
+        self.text_font_size = None
+        self.text_min_width = 160
         if self.canvas.winfo_exists():
             self.canvas.focus_force()
         return "break"
@@ -1084,7 +1160,7 @@ class RectSelector:
             self.start_cross(x, y)
             return "break"
         if self.active_tool == "text" and self.point_in_selection(x, y):
-            self.start_text(x, y)
+            self.start_text_drag(x, y)
             return "break"
         self.mode = mode
         self.anchor = (x, y)
@@ -1110,6 +1186,9 @@ class RectSelector:
             return
         if self.freehand_points is not None:
             self.extend_freehand(x, y)
+            return
+        if self.text_drag_origin is not None:
+            self.extend_text_drag(x, y)
             return
         if not self.anchor:
             return
@@ -1153,6 +1232,10 @@ class RectSelector:
             return
         if self.freehand_points is not None:
             self.finish_freehand()
+            return
+        if self.text_drag_origin is not None:
+            x, y = self.local_point(event)
+            self.finish_text_drag(x, y)
             return
         self.anchor = None
         self.start_rect = None
@@ -1200,7 +1283,7 @@ class RectSelector:
                 continue
             if kind == "text":
                 x, y = annotation["start"]
-                font = self.image_text_font()
+                font = self.image_text_font(annotation.get("font_family"), annotation.get("font_size"))
                 draw.text((x - left, y - top), annotation["text"], fill=self.ANNOTATION_COLOR, font=font)
                 continue
             if kind == "cross":
@@ -1291,6 +1374,12 @@ class RectSelector:
             self.cross_center = None
             self.cross_size = None
             self.cross_ids = []
+            discarded = True
+        if self.text_drag_origin is not None:
+            if self.text_drag_box_id is not None:
+                self.canvas.delete(self.text_drag_box_id)
+            self.text_drag_origin = None
+            self.text_drag_box_id = None
             discarded = True
         if self.text_editing:
             self.cancel_text()

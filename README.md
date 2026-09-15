@@ -77,10 +77,11 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Arrow – click the start point, then the arrow tip.
 - Rectangle – hold and drag the left mouse button to frame an area.
 - Cross – click once for the configured size, or hold and drag to resize the red X.
-- Text – click inside the selection and type inside a transparent, border-only
-  editor. A compact status shows the active `EN`, `NO`, or `UA` layout and Caps
-  Lock state. `Enter` starts a new line, `Ctrl+Enter` commits the text, and
-  `Escape` cancels the active text editor.
+- Text – click inside the selection for the configured font size, or hold and
+  drag a text frame to set its size. Typing expands the transparent, border-only
+  frame as needed. A compact status shows the active `EN`, `NO`, or `UA` layout
+  and Caps Lock state. `Enter` starts a new line, `Ctrl+Enter` commits the text,
+  and `Escape` cancels the active text editor.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
 
@@ -124,7 +125,8 @@ Capture shortcuts currently use PrintScreen with optional modifier keys.
 
 If a config field is missing, the built-in default from `infershot.py` is used.
 The default annotation font is Palatino Linotype at 24 points. Font size is
-clamped to 8–96 points and DPI-matched in the saved image. A short cross click
+clamped to 8–96 points and DPI-matched in the saved image. Drag-sized text also
+uses this range without changing the configured default. A short cross click
 uses the configured 48 px default; hold and drag for a live size from 16–256 px.
 
 ## License

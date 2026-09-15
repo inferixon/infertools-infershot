@@ -6,6 +6,7 @@
 - Added freehand, line, arrow, rectangle, cross, multiline text, eraser.
 - Added DPI-matched text preview with live layout and Caps Lock status.
 - Added live config reload on every PrintScreen invocation.
+- Added drag-sized text frames with per-text font sizes.
 
 ## 1.1
 
