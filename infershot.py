@@ -396,7 +396,7 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "rectangle", "cross", "text", "eraser")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "double_arrow", "rectangle", "cross", "text", "eraser")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
@@ -610,8 +610,8 @@ class RectSelector:
             "capstyle": tk.ROUND,
             "tags": ("annotation",),
         }
-        if kind == "arrow":
-            options.update(arrow=tk.LAST, arrowshape=(27, 33, 10))
+        if kind in {"arrow", "double_arrow"}:
+            options.update(arrow=tk.BOTH if kind == "double_arrow" else tk.LAST, arrowshape=(27, 33, 10))
         return self.canvas.create_line(*start, *end, **options)
 
     def toolbar_tool_at(self, x, y):
@@ -708,8 +708,8 @@ class RectSelector:
         tags = ("toolbar",)
         if tool == "line":
             self.canvas.create_line(left + 8, bottom - 8, right - 8, top + 8, fill=color, width=3, tags=tags)
-        elif tool == "arrow":
-            self.canvas.create_line(left + 7, bottom - 8, right - 7, top + 8, fill=color, width=3, arrow=tk.LAST, arrowshape=(9, 11, 4), tags=tags)
+        elif tool in {"arrow", "double_arrow"}:
+            self.canvas.create_line(left + 7, bottom - 8, right - 7, top + 8, fill=color, width=3, arrow=tk.BOTH if tool == "double_arrow" else tk.LAST, arrowshape=(9, 11, 4), tags=tags)
         elif tool == "rectangle":
             self.canvas.create_rectangle(left + 8, top + 9, right - 8, bottom - 9, fill="", outline=color, width=2, tags=tags)
         elif tool == "freehand":
@@ -1148,7 +1148,7 @@ class RectSelector:
             self.anchor = (x, y)
             self.start_rect = self.normalized_rect()
             return "break"
-        if self.active_tool in {"line", "arrow"} and self.point_in_selection(x, y):
+        if self.active_tool in {"line", "arrow", "double_arrow"} and self.point_in_selection(x, y):
             return self.annotation_click(event, self.active_tool)
         if self.active_tool == "freehand" and self.point_in_selection(x, y):
             self.start_freehand(x, y)
@@ -1316,8 +1316,10 @@ class RectSelector:
             start = (sx - left, sy - top)
             end = (ex - left, ey - top)
             draw.line((start, end), fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH)
-            if kind == "arrow":
+            if kind in {"arrow", "double_arrow"}:
                 self.draw_arrow_head(draw, start, end)
+                if kind == "double_arrow":
+                    self.draw_arrow_head(draw, end, start)
 
     def draw_arrow_head(self, draw, start, end):
         sx, sy = start

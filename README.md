@@ -75,6 +75,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Freehand – hold and drag the left mouse button.
 - Line – click the start and end points.
 - Arrow – click the start point, then the arrow tip.
+- Double arrow – click the two endpoints to add arrowheads at both ends.
 - Rectangle – hold and drag the left mouse button to frame an area.
 - Cross – click once for the configured size, or hold and drag to resize the red X.
 - Text – click inside the selection for the configured font size, or hold and

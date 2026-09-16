@@ -3,7 +3,7 @@
 ## 1.2
 
 - Added a floating annotation toolbar.
-- Added freehand, line, arrow, rectangle, cross, eraser.
+- Added freehand, line, arrow, double arrow, rectangle, cross, eraser.
 - Added multiline drag-sized text with live layout and Caps Lock status.
 
 ## 1.1
