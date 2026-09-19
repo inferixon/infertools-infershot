@@ -4,6 +4,7 @@
   "quality": 95,
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
+  "undo_limit": 20,
   "text": {
     "font_family": "Palatino Linotype",
     "font_size": 24
@@ -19,6 +20,7 @@
     "arrow_start": "Ctrl+RightMouse",
     "arrow_finish": "RightMouse",
     "save": "Enter",
+    "undo": "Ctrl+Z",
     "cancel": "Escape"
   }
 }

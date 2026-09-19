@@ -5,6 +5,7 @@
 - Added a floating annotation toolbar.
 - Added freehand, line, arrow, double arrow, rectangle, cross, eraser.
 - Added multiline drag-sized text with live layout and Caps Lock status.
+- Added configurable 20-state undo, including restoration after Eraser.
 
 ## 1.1
 

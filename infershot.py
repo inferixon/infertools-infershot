@@ -1,4 +1,5 @@
 import ctypes
+import copy
 import io
 import json
 import math
@@ -27,6 +28,7 @@ DEFAULT_CONFIG = {
     "quality": 95,
     "filename_mask": "ScreenShot-{nnn}",
     "copy_to_clipboard": True,
+    "undo_limit": 20,
     "text": {
         "font_family": "Palatino Linotype",
         "font_size": 24
@@ -42,6 +44,7 @@ DEFAULT_CONFIG = {
         "arrow_start": "Ctrl+RightMouse",
         "arrow_finish": "RightMouse",
         "save": "Enter",
+        "undo": "Ctrl+Z",
         "cancel": "Escape"
     }
 }
@@ -170,6 +173,7 @@ def load_config():
         config["format"] = "jpg"
     config["quality"] = max(1, min(100, int(config["quality"])))
     config["copy_to_clipboard"] = bool(config["copy_to_clipboard"])
+    config["undo_limit"] = max(1, min(100, int(config["undo_limit"])))
     config["text"]["font_family"] = str(config["text"]["font_family"]).strip() or DEFAULT_CONFIG["text"]["font_family"]
     config["text"]["font_size"] = max(8, min(96, int(config["text"]["font_size"])))
     config["cross"]["size"] = max(16, min(256, int(config["cross"]["size"])))
@@ -423,6 +427,7 @@ class RectSelector:
         self.anchor = None
         self.start_rect = None
         self.annotations = []
+        self.undo_stack = []
         self.pending_annotation = None
         self.pending_annotation_id = None
         self.active_tool = None
@@ -477,6 +482,7 @@ class RectSelector:
         self.bind_hotkey("arrow_start", self.on_arrow_click)
         self.bind_hotkey("arrow_finish", self.on_arrow_finish)
         self.bind_hotkey("save", self.save)
+        self.bind_hotkey("undo", self.undo)
         self.bind_hotkey("cancel", self.on_cancel)
         self.window.bind("<Motion>", self.on_motion)
         self.draw_rect()
@@ -582,6 +588,7 @@ class RectSelector:
         if math.dist(start, (x, y)) < 3:
             return "break"
 
+        self.remember_undo_state()
         self.annotations.append({"kind": kind, "start": start, "end": (x, y)})
         self.canvas.coords(self.pending_annotation_id, *start, x, y)
         self.pending_annotation = None
@@ -631,12 +638,68 @@ class RectSelector:
 
     def clear_annotations(self):
         self.discard_pending()
+        if self.annotations:
+            self.remember_undo_state()
         self.annotations.clear()
         self.canvas.delete("annotation")
         self.active_tool = None
         self.draw_toolbar()
         self.raise_selection_controls()
         log("annotations cleared")
+
+    def remember_undo_state(self):
+        self.undo_stack.append(copy.deepcopy(self.annotations))
+        overflow = len(self.undo_stack) - CONFIG["undo_limit"]
+        if overflow > 0:
+            del self.undo_stack[:overflow]
+
+    def undo(self, _event=None):
+        if self.discard_pending():
+            log("pending annotation cancelled by undo")
+            return "break"
+        if not self.undo_stack:
+            log("undo history empty")
+            return "break"
+        self.annotations = self.undo_stack.pop()
+        self.redraw_annotation_items()
+        self.raise_selection_controls()
+        log(f"undo restored annotations={len(self.annotations)} remaining={len(self.undo_stack)}")
+        return "break"
+
+    def redraw_annotation_items(self):
+        self.canvas.delete("annotation")
+        for annotation in self.annotations:
+            kind = annotation["kind"]
+            if kind == "freehand":
+                coords = [coordinate for point in annotation["points"] for coordinate in point]
+                self.canvas.create_line(
+                    *coords, fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH,
+                    capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, tags=("annotation",),
+                )
+            elif kind == "text":
+                self.canvas.create_text(
+                    *annotation["start"], text=annotation["text"], fill=self.ANNOTATION_COLOR,
+                    font=self.text_font(annotation.get("font_family"), annotation.get("font_size")),
+                    anchor="nw", tags=("annotation",),
+                )
+            elif kind == "cross":
+                x, y = annotation["center"]
+                half = annotation["size"] / 2
+                self.canvas.create_line(
+                    x - half, y - half, x + half, y + half,
+                    fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                )
+                self.canvas.create_line(
+                    x + half, y - half, x - half, y + half,
+                    fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                )
+            elif kind == "rectangle":
+                self.canvas.create_rectangle(
+                    *annotation["start"], *annotation["end"], fill="",
+                    outline=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                )
+            else:
+                self.create_annotation_item(kind, annotation["start"], annotation["end"])
 
     def create_rounded_rect(self, left, top, right, bottom, radius, **options):
         radius = max(1, min(radius, (right - left) / 2, (bottom - top) / 2))
@@ -771,6 +834,7 @@ class RectSelector:
     def finish_cross(self):
         if self.cross_center is None:
             return
+        self.remember_undo_state()
         self.annotations.append({"kind": "cross", "center": self.cross_center, "size": self.cross_size})
         self.cross_center = None
         self.cross_size = None
@@ -808,6 +872,7 @@ class RectSelector:
         if self.freehand_points is None:
             return
         if len(self.freehand_points) > 1:
+            self.remember_undo_state()
             self.annotations.append({"kind": "freehand", "points": list(self.freehand_points)})
         elif self.freehand_id is not None:
             self.canvas.delete(self.freehand_id)
@@ -830,6 +895,7 @@ class RectSelector:
             return
         start = self.pending_annotation["start"]
         if abs(x - start[0]) >= 3 and abs(y - start[1]) >= 3:
+            self.remember_undo_state()
             self.annotations.append({"kind": "rectangle", "start": start, "end": (x, y)})
             self.canvas.coords(self.pending_annotation_id, *start, x, y)
         elif self.pending_annotation_id is not None:
@@ -908,6 +974,7 @@ class RectSelector:
         self.text_input.bind("<KeyRelease>", self.update_text_cursor, add="+")
         self.text_input.bind("<Return>", self.on_text_return)
         self.text_input.bind("<KP_Enter>", self.on_text_return)
+        self.text_input.bind(selector_binding(CONFIG["hotkeys"]["undo"]), self.undo, add="+")
         self.text_input.bind(selector_binding(CONFIG["hotkeys"]["cancel"]), self.on_cancel, add="+")
         self.text_input.edit_modified(False)
         line_height = self.text_line_height(self.text_font_size)
@@ -1076,6 +1143,7 @@ class RectSelector:
         size = self.text_font_size
         self.cancel_text()
         if value:
+            self.remember_undo_state()
             self.annotations.append({"kind": "text", "start": origin, "text": value, "font_family": family, "font_size": size})
             self.canvas.create_text(
                 *origin,

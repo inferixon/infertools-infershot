@@ -58,6 +58,7 @@ Stop the background process with:
 | Finish the active line | `LeftMouse` |
 | Start a red arrow | `Ctrl+RightMouse` |
 | Finish the active arrow | `RightMouse` |
+| Undo the last annotation action | `Ctrl+Z` |
 | Save the selected capture | `Enter` |
 | Cancel the pending annotation or capture | `Escape` |
 
@@ -86,6 +87,10 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
 
+`Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
+`Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
+`undo_limit` states (20 by default).
+
 Click the active toolbar icon again to return to normal selection move mode.
 Resize handles always remain available, including after annotations are added.
 
@@ -100,6 +105,7 @@ Resize handles always remain available, including after annotations are added.
   "quality": 95,
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
+  "undo_limit": 20,
   "text": {
     "font_family": "Palatino Linotype",
     "font_size": 24
@@ -115,6 +121,7 @@ Resize handles always remain available, including after annotations are added.
     "arrow_start": "Ctrl+RightMouse",
     "arrow_finish": "RightMouse",
     "save": "Enter",
+    "undo": "Ctrl+Z",
     "cancel": "Escape"
   }
 }
