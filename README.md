@@ -4,7 +4,13 @@ Infershot is a lightweight Windows screenshot tool for fast capture and visual Q
 It runs in the background, saves numbered screenshots, copies them to the clipboard,
 and adds colored annotations before saving a selected region.
 
-![Infershot toolbar highlighting two JavaScript bugs with line, single and double arrows, rectangle, freehand, cross, and text annotations](assets/infershot-qa-demo.png)
+![Infershot selection frame and complete toolbar over a QA demo with four JavaScript bugs marked in red and one positive note in green](assets/infershot-qa-demo.png)
+
+The demo uses an [intentional buggy code fixture](assets/demo/buggy-checkout.js).
+`python assets/demo/generate.py all` builds the clean background, annotated image,
+transparent selection-and-toolbar overlay, and final README image as separate files.
+After UI-only changes, run `python assets/demo/generate.py ui` and then
+`python assets/demo/generate.py final` without rebuilding the code or annotations.
 
 ## Features
 
