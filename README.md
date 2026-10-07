@@ -2,7 +2,7 @@
 
 Infershot is a lightweight Windows screenshot tool for fast capture and visual QA.
 It runs in the background, saves numbered screenshots, copies them to the clipboard,
-and adds straight red lines or arrows before saving a selected region.
+and adds colored annotations before saving a selected region.
 
 ![Infershot toolbar highlighting two JavaScript bugs with line, single and double arrows, rectangle, freehand, cross, and text annotations](assets/infershot-qa-demo.png)
 
@@ -11,9 +11,9 @@ and adds straight red lines or arrows before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Floating translucent buttons for freehand, line, arrow, rectangle, cross, text, and eraser tools
+- Floating translucent buttons for freehand, line, arrow, double arrow, rectangle, cross, question mark, text, eraser, and configured colors
 - DPI-matched text preview with a live keyboard layout and Caps Lock indicator
-- Two-click red line and arrow annotations
+- Two-click line and arrow annotations in the selected color
 - Automatic numbered filenames
 - Optional clipboard copy
 - Configurable capture, annotation, save, and cancel hotkeys
@@ -54,9 +54,9 @@ Stop the background process with:
 | --- | --- |
 | Select a rectangle | `PrintScreen` |
 | Capture the monitor under the cursor | `Ctrl+PrintScreen` |
-| Start a red line | `Ctrl+LeftMouse` |
+| Start a line | `Ctrl+LeftMouse` |
 | Finish the active line | `LeftMouse` |
-| Start a red arrow | `Ctrl+RightMouse` |
+| Start an arrow | `Ctrl+RightMouse` |
 | Finish the active arrow | `RightMouse` |
 | Undo the last annotation action | `Ctrl+Z` |
 | Save the selected capture | `Enter` |
@@ -78,7 +78,8 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Arrow – click the start point, then the arrow tip.
 - Double arrow – click the two endpoints to add arrowheads at both ends.
 - Rectangle – hold and drag the left mouse button to frame an area.
-- Cross – click once for the configured size, or hold and drag to resize the red X.
+- Cross – click once for the configured size, or hold and drag to resize X.
+- Question mark – click once for the configured size, or hold and drag to resize `?`.
 - Text – click inside the selection for the configured font size, or hold and
   drag a text frame to set its size. Typing expands the transparent, border-only
   frame as needed. A compact status shows the active `EN`, `NO`, or `UA` layout
@@ -86,6 +87,8 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
   and `Escape` cancels the active text editor.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
+- Color circles – select the color for subsequent annotations. They follow the
+  tool buttons in the order listed in `colors`; the count matches that list.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
@@ -106,11 +109,15 @@ Resize handles always remain available, including after annotations are added.
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
   "undo_limit": 20,
+  "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",
     "font_size": 24
   },
   "cross": {
+    "size": 48
+  },
+  "question": {
     "size": 48
   },
   "hotkeys": {
@@ -136,6 +143,10 @@ The default annotation font is Palatino Linotype at 24 points. Font size is
 clamped to 8–96 points and DPI-matched in the saved image. Drag-sized text also
 uses this range without changing the configured default. A short cross click
 uses the configured 48 px default; hold and drag for a live size from 16–256 px.
+The question mark has its own `question.size` default and uses the same drag
+gesture. `colors` accepts `#RRGGBB` values in display order; an empty list hides
+the color buttons and keeps the built-in red fallback. Each completed annotation
+keeps its chosen color when another color is selected or an action is undone.
 
 ## License
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3
+
+- Added configurable annotation colors.
+- Added a resizable question-mark tool.
+
 ## 1.2
 
 - Added a floating annotation toolbar.

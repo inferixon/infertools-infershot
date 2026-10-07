@@ -5,11 +5,15 @@
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
   "undo_limit": 20,
+  "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",
     "font_size": 24
   },
   "cross": {
+    "size": 48
+  },
+  "question": {
     "size": 48
   },
   "hotkeys": {

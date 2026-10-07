@@ -29,11 +29,15 @@ DEFAULT_CONFIG = {
     "filename_mask": "ScreenShot-{nnn}",
     "copy_to_clipboard": True,
     "undo_limit": 20,
+    "colors": ["#ff2020", "#22c55e"],
     "text": {
         "font_family": "Palatino Linotype",
         "font_size": 24
     },
     "cross": {
+        "size": 48
+    },
+    "question": {
         "size": 48
     },
     "hotkeys": {
@@ -168,6 +172,13 @@ def load_config():
     config["hotkeys"] = DEFAULT_CONFIG["hotkeys"] | raw.get("hotkeys", {})
     config["text"] = DEFAULT_CONFIG["text"] | raw.get("text", {})
     config["cross"] = DEFAULT_CONFIG["cross"] | raw.get("cross", {})
+    config["question"] = DEFAULT_CONFIG["question"] | raw.get("question", {})
+    colors = config["colors"]
+    if not isinstance(colors, list) or any(
+        not isinstance(color, str) or re.fullmatch(r"#[0-9a-fA-F]{6}", color) is None
+        for color in colors
+    ):
+        raise ValueError("colors must be a list of #RRGGBB values")
     config["format"] = str(config["format"]).lower().lstrip(".")
     if config["format"] == "jpeg":
         config["format"] = "jpg"
@@ -177,6 +188,7 @@ def load_config():
     config["text"]["font_family"] = str(config["text"]["font_family"]).strip() or DEFAULT_CONFIG["text"]["font_family"]
     config["text"]["font_size"] = max(8, min(96, int(config["text"]["font_size"])))
     config["cross"]["size"] = max(16, min(256, int(config["cross"]["size"])))
+    config["question"]["size"] = max(16, min(256, int(config["question"]["size"])))
     return config
 
 
@@ -400,7 +412,7 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "double_arrow", "rectangle", "cross", "text", "eraser")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "double_arrow", "rectangle", "cross", "question", "text", "eraser")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
@@ -431,13 +443,18 @@ class RectSelector:
         self.pending_annotation = None
         self.pending_annotation_id = None
         self.active_tool = None
+        self.current_color = CONFIG["colors"][0] if CONFIG["colors"] else self.ANNOTATION_COLOR
+        self.selected_color_index = 0 if CONFIG["colors"] else None
         self.hover_tool = None
         self.toolbar_hitboxes = []
         self.freehand_points = None
         self.freehand_id = None
-        self.cross_center = None
-        self.cross_size = None
-        self.cross_ids = []
+        self.symbol_center = None
+        self.symbol_size = None
+        self.symbol_kind = None
+        self.symbol_color = None
+        self.symbol_ids = []
+        self.freehand_color = None
         self.text_editing = False
         self.text_buffer = ""
         self.text_box_id = None
@@ -449,6 +466,7 @@ class RectSelector:
         self.text_origin = None
         self.text_font_family = None
         self.text_font_size = None
+        self.text_color = None
         self.text_min_width = 160
         self.text_drag_origin = None
         self.text_drag_box_id = None
@@ -576,8 +594,8 @@ class RectSelector:
             return "break"
 
         if self.pending_annotation is None:
-            self.pending_annotation = {"kind": kind, "start": (x, y)}
-            self.pending_annotation_id = self.create_annotation_item(kind, (x, y), (x, y))
+            self.pending_annotation = {"kind": kind, "start": (x, y), "color": self.current_color}
+            self.pending_annotation_id = self.create_annotation_item(kind, (x, y), (x, y), self.current_color)
             self.canvas.configure(cursor="crosshair")
             return "break"
 
@@ -589,7 +607,7 @@ class RectSelector:
             return "break"
 
         self.remember_undo_state()
-        self.annotations.append({"kind": kind, "start": start, "end": (x, y)})
+        self.annotations.append({"kind": kind, "start": start, "end": (x, y), "color": self.pending_annotation["color"]})
         self.canvas.coords(self.pending_annotation_id, *start, x, y)
         self.pending_annotation = None
         self.pending_annotation_id = None
@@ -610,9 +628,9 @@ class RectSelector:
         if self.pending_annotation is not None and self.pending_annotation["kind"] == "arrow":
             return self.annotation_click(event, "arrow")
 
-    def create_annotation_item(self, kind, start, end):
+    def create_annotation_item(self, kind, start, end, color=None):
         options = {
-            "fill": self.ANNOTATION_COLOR,
+            "fill": color or self.current_color,
             "width": self.ANNOTATION_WIDTH,
             "capstyle": tk.ROUND,
             "tags": ("annotation",),
@@ -628,6 +646,12 @@ class RectSelector:
         return None
 
     def select_tool(self, tool):
+        if isinstance(tool, tuple) and tool[0] == "color":
+            self.selected_color_index = tool[1]
+            self.current_color = CONFIG["colors"][tool[1]]
+            self.draw_toolbar()
+            log(f"annotation color={self.current_color}")
+            return
         if tool == "eraser":
             self.clear_annotations()
             return
@@ -670,15 +694,16 @@ class RectSelector:
         self.canvas.delete("annotation")
         for annotation in self.annotations:
             kind = annotation["kind"]
+            color = annotation.get("color", self.ANNOTATION_COLOR)
             if kind == "freehand":
                 coords = [coordinate for point in annotation["points"] for coordinate in point]
                 self.canvas.create_line(
-                    *coords, fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH,
+                    *coords, fill=color, width=self.ANNOTATION_WIDTH,
                     capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, tags=("annotation",),
                 )
             elif kind == "text":
                 self.canvas.create_text(
-                    *annotation["start"], text=annotation["text"], fill=self.ANNOTATION_COLOR,
+                    *annotation["start"], text=annotation["text"], fill=color,
                     font=self.text_font(annotation.get("font_family"), annotation.get("font_size")),
                     anchor="nw", tags=("annotation",),
                 )
@@ -687,19 +712,21 @@ class RectSelector:
                 half = annotation["size"] / 2
                 self.canvas.create_line(
                     x - half, y - half, x + half, y + half,
-                    fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                    fill=color, width=self.ANNOTATION_WIDTH, tags=("annotation",),
                 )
                 self.canvas.create_line(
                     x + half, y - half, x - half, y + half,
-                    fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                    fill=color, width=self.ANNOTATION_WIDTH, tags=("annotation",),
                 )
+            elif kind == "question":
+                self.create_symbol_items(kind, annotation["center"], annotation["size"], color)
             elif kind == "rectangle":
                 self.canvas.create_rectangle(
                     *annotation["start"], *annotation["end"], fill="",
-                    outline=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, tags=("annotation",),
+                    outline=color, width=self.ANNOTATION_WIDTH, tags=("annotation",),
                 )
             else:
-                self.create_annotation_item(kind, annotation["start"], annotation["end"])
+                self.create_annotation_item(kind, annotation["start"], annotation["end"], color)
 
     def create_rounded_rect(self, left, top, right, bottom, radius, **options):
         radius = max(1, min(radius, (right - left) / 2, (bottom - top) / 2))
@@ -727,9 +754,11 @@ class RectSelector:
             return
 
         left, top, right, bottom = rect
-        count = len(self.TOOLBAR_TOOLS)
-        width = count * self.TOOLBAR_BUTTON + (count - 1) * self.TOOLBAR_GAP
-        height = self.TOOLBAR_BUTTON
+        tools = self.TOOLBAR_TOOLS + tuple(("color", index) for index in range(len(CONFIG["colors"])))
+        columns = min(len(tools), max(1, (self.width - 2 * self.TOOLBAR_MARGIN + self.TOOLBAR_GAP) // (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)))
+        rows = math.ceil(len(tools) / columns)
+        width = columns * self.TOOLBAR_BUTTON + (columns - 1) * self.TOOLBAR_GAP
+        height = rows * self.TOOLBAR_BUTTON + (rows - 1) * self.TOOLBAR_GAP
         x = max(0, min(self.width - width, left))
         if top >= height + self.TOOLBAR_MARGIN:
             y = top - height - self.TOOLBAR_MARGIN
@@ -738,12 +767,12 @@ class RectSelector:
         else:
             y = max(0, min(self.height - height, top + self.TOOLBAR_MARGIN))
 
-        for index, tool in enumerate(self.TOOLBAR_TOOLS):
-            bx1 = x + index * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
-            by1 = y
+        for index, tool in enumerate(tools):
+            bx1 = x + (index % columns) * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
+            by1 = y + (index // columns) * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
             bx2 = bx1 + self.TOOLBAR_BUTTON
             by2 = by1 + self.TOOLBAR_BUTTON
-            selected = tool == self.active_tool
+            selected = self.selected_color_index == tool[1] if isinstance(tool, tuple) else tool == self.active_tool
             hovered = tool == self.hover_tool
             if hovered:
                 self.create_rounded_rect(
@@ -754,10 +783,13 @@ class RectSelector:
                     bx1 - 2, by1 - 2, bx2 + 2, by2 + 2, self.TOOLBAR_RADIUS + 2,
                     fill="", outline="#d8dde6", width=1, tags=("toolbar",),
                 )
+            outline = CONFIG["colors"][tool[1]] if selected and isinstance(tool, tuple) else (
+                self.current_color if selected else ("#f4f7fb" if hovered else "#56606d")
+            )
             self.create_rounded_rect(
                 bx1, by1, bx2, by2, self.TOOLBAR_RADIUS,
-                fill="#5b1820" if selected else "#111827",
-                outline="#ff666f" if selected else ("#f4f7fb" if hovered else "#56606d"),
+                fill="#5b1820" if selected and not isinstance(tool, tuple) else "#111827",
+                outline=outline,
                 width=1, stipple="gray25", tags=("toolbar",),
             )
             self.draw_toolbar_icon(tool, bx1, by1, bx2, by2, selected, hovered)
@@ -769,7 +801,13 @@ class RectSelector:
         cx = (left + right) / 2
         cy = (top + bottom) / 2
         tags = ("toolbar",)
-        if tool == "line":
+        if isinstance(tool, tuple) and tool[0] == "color":
+            self.canvas.create_oval(
+                cx - 9, cy - 9, cx + 9, cy + 9,
+                fill=CONFIG["colors"][tool[1]], outline="#eef2f7" if selected else "",
+                width=1, tags=tags,
+            )
+        elif tool == "line":
             self.canvas.create_line(left + 8, bottom - 8, right - 8, top + 8, fill=color, width=3, tags=tags)
         elif tool in {"arrow", "double_arrow"}:
             self.canvas.create_line(left + 7, bottom - 8, right - 7, top + 8, fill=color, width=3, arrow=tk.BOTH if tool == "double_arrow" else tk.LAST, arrowshape=(9, 11, 4), tags=tags)
@@ -784,8 +822,10 @@ class RectSelector:
         elif tool == "cross":
             self.canvas.create_line(left + 9, top + 9, right - 9, bottom - 9, fill=color, width=3, tags=tags)
             self.canvas.create_line(right - 9, top + 9, left + 9, bottom - 9, fill=color, width=3, tags=tags)
+        elif tool == "question":
+            self.canvas.create_text(cx, cy, text="?", fill=color, font=("Segoe UI", -22, "bold"), tags=tags)
         elif tool == "text":
-            self.canvas.create_text(cx, cy, text="T", fill=color, font=("Segoe UI", 18, "bold"), tags=tags)
+            self.canvas.create_text(cx, cy, text="T", fill=color, font=("Segoe UI", -22, "bold"), tags=tags)
         else:
             self.canvas.create_polygon(
                 left + 9, bottom - 12,
@@ -799,53 +839,75 @@ class RectSelector:
                 fill=color, width=2, tags=tags,
             )
 
-    def start_cross(self, x, y):
-        left, top, right, bottom = self.normalized_rect()
-        size = CONFIG["cross"]["size"]
-        half = min(size / 2, (right - left) / 2, (bottom - top) / 2)
-        x = max(left + half, min(right - half, x))
-        y = max(top + half, min(bottom - half, y))
-        self.cross_center = (x, y)
-        self.cross_size = half * 2
+    def create_symbol_items(self, kind, center, size, color):
+        x, y = center
+        if kind == "question":
+            return [self.canvas.create_text(
+                x, y, text="?", fill=color,
+                font=("Segoe UI", -max(16, round(size))),
+                anchor="center", tags=("annotation",),
+            )]
+        half = size / 2
         options = {
-            "fill": self.ANNOTATION_COLOR,
+            "fill": color,
             "width": self.ANNOTATION_WIDTH,
             "capstyle": tk.ROUND,
             "tags": ("annotation",),
         }
-        self.cross_ids = [
+        return [
             self.canvas.create_line(x - half, y - half, x + half, y + half, **options),
             self.canvas.create_line(x + half, y - half, x - half, y + half, **options),
         ]
+
+    def start_symbol(self, kind, x, y):
+        left, top, right, bottom = self.normalized_rect()
+        size = CONFIG[kind]["size"]
+        half = min(size / 2, (right - left) / 2, (bottom - top) / 2)
+        x = max(left + half, min(right - half, x))
+        y = max(top + half, min(bottom - half, y))
+        self.symbol_center = (x, y)
+        self.symbol_size = half * 2
+        self.symbol_kind = kind
+        self.symbol_color = self.current_color
+        self.symbol_ids = self.create_symbol_items(kind, self.symbol_center, self.symbol_size, self.symbol_color)
         self.raise_selection_controls()
 
-    def extend_cross(self, x, y):
-        if self.cross_center is None or len(self.cross_ids) != 2:
+    def extend_symbol(self, x, y):
+        if self.symbol_center is None:
             return
         left, top, right, bottom = self.normalized_rect()
-        cx, cy = self.cross_center
+        cx, cy = self.symbol_center
         max_half = min(128, cx - left, right - cx, cy - top, bottom - cy)
         half = min(max_half, max(8, max(abs(x - cx), abs(y - cy))))
-        self.cross_size = half * 2
-        self.canvas.coords(self.cross_ids[0], cx - half, cy - half, cx + half, cy + half)
-        self.canvas.coords(self.cross_ids[1], cx + half, cy - half, cx - half, cy + half)
+        self.symbol_size = half * 2
+        if self.symbol_kind == "question":
+            self.canvas.itemconfigure(self.symbol_ids[0], font=("Segoe UI", -max(16, round(self.symbol_size))))
+        else:
+            self.canvas.coords(self.symbol_ids[0], cx - half, cy - half, cx + half, cy + half)
+            self.canvas.coords(self.symbol_ids[1], cx + half, cy - half, cx - half, cy + half)
         self.raise_selection_controls()
 
-    def finish_cross(self):
-        if self.cross_center is None:
+    def finish_symbol(self):
+        if self.symbol_center is None:
             return
         self.remember_undo_state()
-        self.annotations.append({"kind": "cross", "center": self.cross_center, "size": self.cross_size})
-        self.cross_center = None
-        self.cross_size = None
-        self.cross_ids = []
+        self.annotations.append({
+            "kind": self.symbol_kind, "center": self.symbol_center,
+            "size": self.symbol_size, "color": self.symbol_color,
+        })
+        self.symbol_center = None
+        self.symbol_size = None
+        self.symbol_kind = None
+        self.symbol_color = None
+        self.symbol_ids = []
         self.raise_selection_controls()
 
     def start_freehand(self, x, y):
         self.freehand_points = [(x, y)]
+        self.freehand_color = self.current_color
         self.freehand_id = self.canvas.create_line(
             x, y, x, y,
-            fill=self.ANNOTATION_COLOR,
+            fill=self.freehand_color,
             width=self.ANNOTATION_WIDTH,
             capstyle=tk.ROUND,
             joinstyle=tk.ROUND,
@@ -873,19 +935,20 @@ class RectSelector:
             return
         if len(self.freehand_points) > 1:
             self.remember_undo_state()
-            self.annotations.append({"kind": "freehand", "points": list(self.freehand_points)})
+            self.annotations.append({"kind": "freehand", "points": list(self.freehand_points), "color": self.freehand_color})
         elif self.freehand_id is not None:
             self.canvas.delete(self.freehand_id)
         self.freehand_points = None
         self.freehand_id = None
+        self.freehand_color = None
         self.raise_selection_controls()
 
     def start_rectangle(self, x, y):
-        self.pending_annotation = {"kind": "rectangle", "start": (x, y)}
+        self.pending_annotation = {"kind": "rectangle", "start": (x, y), "color": self.current_color}
         self.pending_annotation_id = self.canvas.create_rectangle(
             x, y, x, y,
             fill="",
-            outline=self.ANNOTATION_COLOR,
+            outline=self.current_color,
             width=self.ANNOTATION_WIDTH,
             tags=("annotation",),
         )
@@ -896,7 +959,7 @@ class RectSelector:
         start = self.pending_annotation["start"]
         if abs(x - start[0]) >= 3 and abs(y - start[1]) >= 3:
             self.remember_undo_state()
-            self.annotations.append({"kind": "rectangle", "start": start, "end": (x, y)})
+            self.annotations.append({"kind": "rectangle", "start": start, "end": (x, y), "color": self.pending_annotation["color"]})
             self.canvas.coords(self.pending_annotation_id, *start, x, y)
         elif self.pending_annotation_id is not None:
             self.canvas.delete(self.pending_annotation_id)
@@ -909,7 +972,7 @@ class RectSelector:
         line_height = self.text_line_height(CONFIG["text"]["font_size"])
         self.text_drag_box_id = self.canvas.create_rectangle(
             x - 5, y - 4, x + 160, y + line_height + 6,
-            fill="", outline="#ff7777", width=1,
+            fill="", outline=self.current_color, width=1,
         )
         self.raise_selection_controls()
 
@@ -958,6 +1021,7 @@ class RectSelector:
         self.text_origin = (x, y)
         self.text_font_family = CONFIG["text"]["font_family"]
         self.text_font_size = font_size or CONFIG["text"]["font_size"]
+        self.text_color = self.current_color
         self.text_min_width = max(160, int(min_width))
         self.text_editing = True
         self.text_buffer = ""
@@ -980,18 +1044,18 @@ class RectSelector:
         line_height = self.text_line_height(self.text_font_size)
         self.text_box_id = self.canvas.create_rectangle(
             x - 5, y - 4, x + self.text_min_width, y + line_height + 6,
-            fill="", outline="#ff7777", width=1,
+            fill="", outline=self.text_color, width=1,
         )
         self.text_preview_id = self.canvas.create_text(
             x, y,
             text=" ",
-            fill=self.ANNOTATION_COLOR,
+            fill=self.text_color,
             font=self.text_font(),
             anchor="nw",
         )
         self.text_caret_id = self.canvas.create_line(
             x, y + 2, x, y + line_height,
-            fill=self.ANNOTATION_COLOR,
+            fill=self.text_color,
             width=2,
         )
         self.text_status_id = self.canvas.create_text(
@@ -1048,6 +1112,14 @@ class RectSelector:
                 continue
         log(f"text font fallback family={family!r}")
         return ImageFont.load_default()
+
+    def image_question_font(self, size):
+        font_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "segoeui.ttf"
+        try:
+            return ImageFont.truetype(str(font_path), max(16, round(size)))
+        except OSError:
+            log(f"question font fallback path={font_path}")
+            return ImageFont.load_default()
 
     def update_text_editor(self):
         if (
@@ -1141,14 +1213,15 @@ class RectSelector:
         origin = self.text_origin
         family = self.text_font_family
         size = self.text_font_size
+        color = self.text_color
         self.cancel_text()
         if value:
             self.remember_undo_state()
-            self.annotations.append({"kind": "text", "start": origin, "text": value, "font_family": family, "font_size": size})
+            self.annotations.append({"kind": "text", "start": origin, "text": value, "font_family": family, "font_size": size, "color": color})
             self.canvas.create_text(
                 *origin,
                 text=value,
-                fill=self.ANNOTATION_COLOR,
+                fill=color,
                 font=self.text_font(family, size),
                 anchor="nw",
                 tags=("annotation",),
@@ -1183,6 +1256,7 @@ class RectSelector:
         self.text_origin = None
         self.text_font_family = None
         self.text_font_size = None
+        self.text_color = None
         self.text_min_width = 160
         if self.canvas.winfo_exists():
             self.canvas.focus_force()
@@ -1224,8 +1298,8 @@ class RectSelector:
         if self.active_tool == "rectangle" and self.point_in_selection(x, y):
             self.start_rectangle(x, y)
             return "break"
-        if self.active_tool == "cross" and self.point_in_selection(x, y):
-            self.start_cross(x, y)
+        if self.active_tool in {"cross", "question"} and self.point_in_selection(x, y):
+            self.start_symbol(self.active_tool, x, y)
             return "break"
         if self.active_tool == "text" and self.point_in_selection(x, y):
             self.start_text_drag(x, y)
@@ -1249,8 +1323,8 @@ class RectSelector:
             self.canvas.coords(self.pending_annotation_id, *start, x, y)
             self.raise_selection_controls()
             return
-        if self.cross_center is not None:
-            self.extend_cross(x, y)
+        if self.symbol_center is not None:
+            self.extend_symbol(x, y)
             return
         if self.freehand_points is not None:
             self.extend_freehand(x, y)
@@ -1295,8 +1369,8 @@ class RectSelector:
                 y = max(top, min(bottom, y))
             self.finish_rectangle(x, y)
             return
-        if self.cross_center is not None:
-            self.finish_cross()
+        if self.symbol_center is not None:
+            self.finish_symbol()
             return
         if self.freehand_points is not None:
             self.finish_freehand()
@@ -1344,27 +1418,35 @@ class RectSelector:
         draw = ImageDraw.Draw(image)
         for annotation in self.annotations:
             kind = annotation["kind"]
+            color = annotation.get("color", self.ANNOTATION_COLOR)
             if kind == "freehand":
                 points = [(x - left, y - top) for x, y in annotation["points"]]
                 if len(points) > 1:
-                    draw.line(points, fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH, joint="curve")
+                    draw.line(points, fill=color, width=self.ANNOTATION_WIDTH, joint="curve")
                 continue
             if kind == "text":
                 x, y = annotation["start"]
                 font = self.image_text_font(annotation.get("font_family"), annotation.get("font_size"))
-                draw.text((x - left, y - top), annotation["text"], fill=self.ANNOTATION_COLOR, font=font)
+                draw.text((x - left, y - top), annotation["text"], fill=color, font=font)
+                continue
+            if kind == "question":
+                x, y = annotation["center"]
+                draw.text(
+                    (x - left, y - top), "?", fill=color,
+                    font=self.image_question_font(annotation["size"]), anchor="mm",
+                )
                 continue
             if kind == "cross":
                 x, y = annotation["center"]
                 half = annotation["size"] / 2
                 draw.line(
                     (x - left - half, y - top - half, x - left + half, y - top + half),
-                    fill=self.ANNOTATION_COLOR,
+                    fill=color,
                     width=self.ANNOTATION_WIDTH,
                 )
                 draw.line(
                     (x - left + half, y - top - half, x - left - half, y - top + half),
-                    fill=self.ANNOTATION_COLOR,
+                    fill=color,
                     width=self.ANNOTATION_WIDTH,
                 )
                 continue
@@ -1375,7 +1457,7 @@ class RectSelector:
                 box_top, box_bottom = sorted((sy - top, ey - top))
                 draw.rectangle(
                     (box_left, box_top, box_right, box_bottom),
-                    outline=self.ANNOTATION_COLOR,
+                    outline=color,
                     width=self.ANNOTATION_WIDTH,
                 )
                 continue
@@ -1383,13 +1465,13 @@ class RectSelector:
             ex, ey = annotation["end"]
             start = (sx - left, sy - top)
             end = (ex - left, ey - top)
-            draw.line((start, end), fill=self.ANNOTATION_COLOR, width=self.ANNOTATION_WIDTH)
+            draw.line((start, end), fill=color, width=self.ANNOTATION_WIDTH)
             if kind in {"arrow", "double_arrow"}:
-                self.draw_arrow_head(draw, start, end)
+                self.draw_arrow_head(draw, start, end, color)
                 if kind == "double_arrow":
-                    self.draw_arrow_head(draw, end, start)
+                    self.draw_arrow_head(draw, end, start, color)
 
-    def draw_arrow_head(self, draw, start, end):
+    def draw_arrow_head(self, draw, start, end, color):
         sx, sy = start
         ex, ey = end
         angle = math.atan2(ey - sy, ex - sx)
@@ -1402,7 +1484,7 @@ class RectSelector:
             ex + self.ARROW_HEAD_LENGTH * math.cos(back + self.ARROW_HEAD_ANGLE),
             ey + self.ARROW_HEAD_LENGTH * math.sin(back + self.ARROW_HEAD_ANGLE),
         )
-        draw.polygon((end, left, right), fill=self.ANNOTATION_COLOR)
+        draw.polygon((end, left, right), fill=color)
 
     def save(self, _event=None):
         if self.text_editing:
@@ -1437,13 +1519,16 @@ class RectSelector:
                 self.canvas.delete(self.freehand_id)
             self.freehand_points = None
             self.freehand_id = None
+            self.freehand_color = None
             discarded = True
-        if self.cross_center is not None:
-            for item_id in self.cross_ids:
+        if self.symbol_center is not None:
+            for item_id in self.symbol_ids:
                 self.canvas.delete(item_id)
-            self.cross_center = None
-            self.cross_size = None
-            self.cross_ids = []
+            self.symbol_center = None
+            self.symbol_size = None
+            self.symbol_kind = None
+            self.symbol_color = None
+            self.symbol_ids = []
             discarded = True
         if self.text_drag_origin is not None:
             if self.text_drag_box_id is not None:
