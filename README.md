@@ -6,16 +6,7 @@ and adds colored annotations before saving a selected region.
 
 ![Infershot selection frame and complete toolbar over a QA demo with four JavaScript bugs marked in red and one positive note in green](assets/infershot-qa-demo.png)
 
-The demo uses an [intentional buggy code fixture](assets/demo/buggy-checkout.js).
-`python assets/demo/generate.py all` builds the clean background, annotated image,
-transparent selection-and-toolbar overlay, and final README image as separate files.
-
 ![Infershot design review with spacing measurements, missing-button markup, a duplicate navigation item, and positive feedback on the primary action](assets/infershot-design-demo.png)
-
-The design-review demo follows the same layer workflow:
-`python assets/demo/generate-design.py all`. Both demos share the UI overlay.
-After UI-only changes, run `python assets/demo/generate.py ui`, then run the
-`final` stage of both generators. The backgrounds and annotations stay unchanged.
 
 ## Features
 
