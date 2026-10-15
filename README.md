@@ -50,6 +50,20 @@ Stop the background process with:
 .\stop-infershot.ps1
 ```
 
+## Updating An Installed Copy
+
+Run from the updated source checkout:
+
+```powershell
+python -m unittest discover -s tests
+python update-installation.py --target C:\Infertools\Infershot
+```
+
+The updater replaces application files, backs up changed files under the target's
+`.updates/` folder, and recursively adds missing configuration keys. Existing
+settings, custom keys, and color lists are preserved. Restart the installed copy
+after updating: run its `stop-infershot.ps1`, then `run-infershot.bat`.
+
 ## Default hotkeys
 
 | Action | Hotkey |

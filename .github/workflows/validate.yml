@@ -1,0 +1,13 @@
+name: Validate source
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python syntax
+        run: python -S -c "import ast,pathlib; [ast.parse(p.read_text(encoding='utf-8-sig')) for p in pathlib.Path('.').rglob('*.py')]"
+      - name: Verify configuration-preserving updates
+        run: python -S -m unittest discover -s tests
