@@ -36,6 +36,8 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(json.loads((target / "config.json").read_text()),
                              {"text": {"font_size": 20}, "custom": 7, "question": {"size": 48}})
             self.assertEqual((Path(first["backup"]) / "infershot.py").read_text(), "old code")
+            self.assertEqual(set(first["files_sha256"]), set(updater.FILES))
+            self.assertEqual((target / "runtime_state.py").read_text(), "new code")
             self.assertEqual(updater.install(source, target)["changed"], [])
 
     def test_invalid_config_aborts_before_code_changes(self):

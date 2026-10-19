@@ -164,6 +164,14 @@ gesture. `colors` accepts `#RRGGBB` values in display order; an empty list hides
 the color buttons and keeps the built-in red fallback. Each completed annotation
 keeps its chosen color when another color is selected or an action is undone.
 
+## Runtime state
+
+One instance runs per interactive Windows session. Logs and PID files live under
+`%LOCALAPPDATA%\Infershot\sessions\<session-id>`, so different users and sessions
+do not share mutable runtime files. `stop-infershot.ps1` stops only the exact
+installed script in the caller's session. Configuration stays beside the script;
+existing screenshot locations and preferences are retained.
+
 ## License
 
 Infershot is released under the [MIT License](LICENSE). You may use, modify,

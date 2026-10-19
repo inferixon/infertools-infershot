@@ -11,7 +11,7 @@ import shutil
 import tempfile
 
 
-FILES = ("infershot.py", "run-infershot.bat", "stop-infershot.ps1",
+FILES = ("infershot.py", "runtime_state.py", "run-infershot.bat", "stop-infershot.ps1",
          "update-installation.py", "requirements.txt")
 
 
@@ -63,12 +63,14 @@ def install(source, target):
     installed = json.loads(config_path.read_text(encoding="utf-8-sig"))
     if append_defaults(existing, installed) != installed:
         raise RuntimeError("Existing configuration values were changed")
-    expected = hashlib.sha256(payload["infershot.py"]).hexdigest()
-    actual = hashlib.sha256((target / "infershot.py").read_bytes()).hexdigest()
-    if actual != expected:
-        raise RuntimeError("Installed code hash mismatch")
+    hashes = {}
+    for name in FILES:
+        expected = hashlib.sha256(payload[name]).hexdigest()
+        hashes[name] = hashlib.sha256((target / name).read_bytes()).hexdigest()
+        if hashes[name] != expected:
+            raise RuntimeError(f"Installed code hash mismatch: {name}")
     return {"target": str(target), "changed": sorted(changes), "backup": str(backup) if backup else None,
-            "sha256": actual, "settings_preserved": True}
+            "sha256": hashes["infershot.py"], "files_sha256": hashes, "settings_preserved": True}
 
 
 def _backup_root(target):

@@ -9,6 +9,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 import tkinter as tk
 from ctypes import wintypes
 from pathlib import Path
@@ -16,11 +17,12 @@ from tkinter import font as tkfont
 
 from PIL import ImageDraw, ImageEnhance, ImageFont, ImageGrab, ImageTk
 
+from runtime_state import (acquire_session_mutex, current_session_id,
+                           remove_owned_pid, state_directory, write_pid)
+
 
 APP_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = APP_DIR / "config.json"
-PID_FILE = Path(__file__).with_suffix(".pid")
-LOG_FILE = Path(__file__).with_suffix(".log")
 
 DEFAULT_CONFIG = {
     "save_path": r"C:\SCREENSHOTS",
@@ -129,6 +131,10 @@ kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWS
 kernel32.CreateMutexW.restype = wintypes.HANDLE
 kernel32.GetLastError.argtypes = []
 kernel32.GetLastError.restype = wintypes.DWORD
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
+kernel32.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+kernel32.ProcessIdToSessionId.restype = wintypes.BOOL
 user32.OpenClipboard.argtypes = [wintypes.HWND]
 user32.OpenClipboard.restype = wintypes.BOOL
 user32.EmptyClipboard.argtypes = []
@@ -155,10 +161,21 @@ except AttributeError:
     pass
 
 
+SESSION_ID = current_session_id(kernel32)
+STATE_DIR = state_directory(SESSION_ID)
+PID_FILE = STATE_DIR / "infershot.pid"
+LOG_FILE = STATE_DIR / "infershot.log"
+
+
 def log(message):
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a", encoding="utf-8") as file:
-        file.write(f"{stamp} {message}\n")
+        file.write(f"{stamp} pid={os.getpid()} session={SESSION_ID} {message}\n")
+
+
+def log_exception(kind, value, tb):
+    log("".join(traceback.format_exception(kind, value, tb)))
 
 
 def load_config():
@@ -1554,6 +1571,7 @@ class InfershotApp:
         self.selector_open = False
         self.proc = LowLevelKeyboardProc(self.keyboard_proc)
         self.root = tk.Tk()
+        self.root.report_callback_exception = log_exception
         self.root.withdraw()
         self.root.title("INFERSHOT")
         self.root.after(60, self.drain_tasks)
@@ -1609,7 +1627,11 @@ class InfershotApp:
                     selector.window.bind("<Destroy>", self.selector_closed, add="+")
         except queue.Empty:
             pass
-        self.root.after(60, self.drain_tasks)
+        except Exception:
+            self.selector_open = False
+            log_exception(*sys.exc_info())
+        finally:
+            self.root.after(60, self.drain_tasks)
 
     def selector_closed(self, _event=None):
         self.selector_open = False
@@ -1619,32 +1641,32 @@ class InfershotApp:
             user32.UnhookWindowsHookEx(self.hook)
             self.hook = None
         try:
-            PID_FILE.unlink(missing_ok=True)
+            remove_owned_pid(PID_FILE, os.getpid())
         except OSError:
             pass
         self.root.destroy()
 
     def run(self):
         apply_config()
-        log("starting")
-        PID_FILE.write_text(str(os.getpid()), encoding="ascii")
+        log(f"starting interpreter={sys.executable} state={STATE_DIR}")
+        write_pid(PID_FILE, os.getpid())
         self.install_hook()
         print("INFERSHOT active.", flush=True)
         self.root.mainloop()
 
 
 def acquire_single_instance():
-    mutex_name = "Global\\INFERSHOT_SINGLE_INSTANCE"
-    handle = kernel32.CreateMutexW(None, True, mutex_name)
-    if not handle:
-        raise ctypes.WinError(ctypes.get_last_error())
-    if kernel32.GetLastError() == 183:
-        return None
-    return handle
+    ctypes.set_last_error(0)
+    return acquire_session_mutex(kernel32, ctypes.get_last_error)
 
 
 if __name__ == "__main__":
+    mutex = None
+    sys.excepthook = log_exception
+    threading.excepthook = lambda args: log_exception(args.exc_type, args.exc_value, args.exc_traceback)
     try:
+        if SESSION_ID == 0:
+            raise RuntimeError("Start Infershot in an interactive Windows session")
         if "--capture-monitor" in sys.argv:
             apply_config()
             capture_monitor()
@@ -1657,6 +1679,9 @@ if __name__ == "__main__":
             sys.exit(0)
         app = InfershotApp()
         app.run()
-    except Exception as error:
-        log(f"fatal: {error!r}")
-        raise
+    finally:
+        if mutex is not None:
+            try:
+                remove_owned_pid(PID_FILE, os.getpid())
+            finally:
+                kernel32.CloseHandle(mutex)
