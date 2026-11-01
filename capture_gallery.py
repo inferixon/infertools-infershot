@@ -174,6 +174,7 @@ class CaptureGallery:
 
     def hide(self):
         if self.window is not None:
+            self.close_button.place_forget()
             self.window.withdraw()
         callback, self.on_close = self.on_close, None
         if callback is not None:
