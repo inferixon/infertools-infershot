@@ -5,7 +5,6 @@
 - Added Redo and configurable stroke widths.
 - Added drag/two-click shapes and staged Escape cancellation.
 - Added a resizable Fix this stamp.
-- Added an icon-only, content-sized capture gallery, PNG ZIP archives, and Copy sheet.
 
 ## 1.3
 
