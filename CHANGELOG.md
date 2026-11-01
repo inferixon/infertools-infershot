@@ -1,10 +1,8 @@
 # Changelog
 
-## 1.5 – Screenshot manager
+## 1.5
 
-- Open screenshots from the save folder with the toolbar or `Shift+PrintScreen`.
-- Borderless manager with hover close and `Esc`; no automatic popups.
-- Disabled manager button for an empty folder; recoverable folder clearing.
+- Screenshot manager
 
 ## 1.4
 
