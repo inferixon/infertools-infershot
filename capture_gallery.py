@@ -139,6 +139,8 @@ class CaptureGallery:
         self.anchor = None
         self.bounds = None
         self.page = 0
+        self.drag_offset = None
+        self.manual_position = None
 
     def folder_files(self):
         return screenshot_files(self.settings()["save_path"]) if self.settings else []
@@ -192,6 +194,7 @@ class CaptureGallery:
             self.refresh()
 
     def hide(self):
+        self.drag_offset = None
         if self.window is not None:
             self.close_button.place_forget()
             self.window.withdraw()
@@ -202,6 +205,7 @@ class CaptureGallery:
     def show(self, on_close=None, anchor=None, bounds=None):
         self.on_close = on_close
         self.anchor, self.bounds, self.page = anchor, bounds, 0
+        self.manual_position = None
         try:
             self.sync_folder()
         except OSError as error:
@@ -220,6 +224,9 @@ class CaptureGallery:
             self.window.resizable(False, False)
             self.window.protocol("WM_DELETE_WINDOW", self.hide)
             self.window.bind("<Escape>", lambda _event: self.hide())
+            self.window.bind("<ButtonPress-1>", self.start_drag, add="+")
+            self.window.bind("<B1-Motion>", self.drag, add="+")
+            self.window.bind("<ButtonRelease-1>", self.end_drag, add="+")
             self.close_button = IconButton(self.window, "remove", "Close – Esc", self.hide, size=24)
             self.window.bind("<Enter>", self.show_close, add="+")
             self.window.bind("<Leave>", lambda _event: self.window.after_idle(self.hide_close), add="+")
@@ -248,6 +255,20 @@ class CaptureGallery:
     def show_close(self, _event=None):
         self.close_button.place(relx=1, x=-26, y=1)
         tk.Misc.lift(self.close_button)
+
+    def start_drag(self, event):
+        if event.widget == self.window and 0 <= event.y < 26:
+            self.drag_offset = (event.x_root - self.window.winfo_x(),
+                                event.y_root - self.window.winfo_y())
+
+    def drag(self, event):
+        if self.drag_offset is not None:
+            x, y = event.x_root - self.drag_offset[0], event.y_root - self.drag_offset[1]
+            self.manual_position = x, y
+            self.window.geometry(f"+{x}+{y}")
+
+    def end_drag(self, _event=None):
+        self.drag_offset = None
 
     def hide_close(self):
         if self.window is None or not self.window.winfo_exists():
@@ -340,6 +361,8 @@ class CaptureGallery:
                 x = self.anchor[2] + 12
             elif self.anchor[0] - 12 - width >= left + 16:
                 x = self.anchor[0] - 12 - width
+        if self.manual_position is not None:
+            x, y = self.manual_position
         # Negative desktop coordinates are absolute positions, not Tk's
         # negative geometry offsets from the right/bottom screen edge.
         self.window.geometry(f"{width}x{height}+{x}+{y}")

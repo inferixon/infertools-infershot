@@ -134,6 +134,7 @@ opens automatically after capture. The manager reads the most recent
 `gallery.limit` images from `save_path`, including files saved before restart.
 The manager and Clear folder icons are disabled when that folder has no images.
 The borderless window closes with `Esc` or the corner close icon shown on hover.
+Drag its empty top strip to move the manager.
 Its square thumbnails have hover
 icons for Copy and Remove; click a thumbnail to include/exclude it. The three
 adjacent action icons are Copy sheet, Save ZIP archive, and Clear screenshot folder, with
