@@ -19,7 +19,7 @@ class ScreenshotFolderTests(unittest.TestCase):
             root = Path(temporary)
             folder = root / "screens"
             folder.mkdir()
-            old, new = folder / "old.JPG", folder / "new.png"
+            old, new = folder / "ScreenShot-old.JPG", folder / "ScreenShot-new.png"
             old.write_bytes(b"old")
             new.write_bytes(b"new")
             os.utime(old, (100, 100))
@@ -42,7 +42,7 @@ class ScreenshotFolderTests(unittest.TestCase):
             root = Path(temporary)
             folder = root / "screens"
             folder.mkdir()
-            image, outside = folder / "one.png", root / "outside.png"
+            image, outside = folder / "ScreenShot-one.png", root / "ScreenShot-outside.png"
             image.write_bytes(b"one")
             outside.write_bytes(b"outside")
             with self.assertRaises(ValueError):
@@ -67,7 +67,7 @@ class ScreenshotFolderTests(unittest.TestCase):
             root = Path(temporary)
             folder = root / "screens"
             folder.mkdir()
-            first, second = folder / "first.png", folder / "second.png"
+            first, second = folder / "ScreenShot-first.png", folder / "ScreenShot-second.png"
             first.write_bytes(b"first")
             second.write_bytes(b"second")
             import shutil
@@ -87,11 +87,23 @@ class ScreenshotFolderTests(unittest.TestCase):
     def test_equivalent_relative_file_path_is_normalized(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
             root = Path(temporary)
-            image = root / "one.png"
+            image = root / "ScreenShot-one.png"
             image.write_bytes(b"one")
             relative = image.relative_to(Path.cwd())
             batch = clear_screenshot_folder(root, root / "trash", [relative])
             self.assertEqual((batch / image.name).read_bytes(), b"one")
+
+    def test_clear_pattern_includes_all_extensions_and_preserves_other_images(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("ScreenShot-001.jpg", "screenshot-002.custom", "photo.png"):
+                (root / name).write_bytes(b"keep")
+            files = screenshot_files(root, captures_only=True)
+            self.assertEqual({path.name for path in files}, {"ScreenShot-001.jpg", "screenshot-002.custom"})
+            with self.assertRaises(ValueError):
+                clear_screenshot_folder(root, root / "trash", [root / "photo.png"])
+            clear_screenshot_folder(root, root / "trash", files)
+            self.assertTrue((root / "photo.png").exists())
 
 
 if __name__ == "__main__":

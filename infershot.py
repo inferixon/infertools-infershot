@@ -371,14 +371,14 @@ class MONITORINFO(ctypes.Structure):
     ]
 
 
-def monitor_bbox_at_cursor():
+def monitor_bbox_at_cursor(work_area=False):
     point = POINT(*get_cursor_pos())
     monitor = user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
     info = MONITORINFO()
     info.cbSize = ctypes.sizeof(MONITORINFO)
     if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
         return get_virtual_screen()
-    rect = info.rcMonitor
+    rect = info.rcWork if work_area else info.rcMonitor
     return rect.left, rect.top, rect.right, rect.bottom
 
 
@@ -810,7 +810,7 @@ class RectSelector:
             self.draw_toolbar()
         return "break"
 
-    def show_gallery(self, _event=None):
+    def show_gallery(self, _event=None, beside=True):
         if self.on_gallery is not None and self.toolbar_tool_enabled("gallery"):
             self.window.withdraw()
             def resume():
@@ -818,7 +818,11 @@ class RectSelector:
                     self.window.deiconify()
                     self.window.focus_force()
                     self.draw_toolbar()
-            self.root.after_idle(lambda: self.on_gallery(on_close=resume))
+            rect = self.normalized_rect()
+            anchor = (rect[0] + self.vleft, rect[1] + self.vtop,
+                      rect[2] + self.vleft, rect[3] + self.vtop) if beside and rect else None
+            bounds = monitor_bbox_at_cursor(work_area=True)
+            self.root.after_idle(lambda: self.on_gallery(on_close=resume, anchor=anchor, bounds=bounds))
         return "break"
 
     def clear_screenshot_folder(self):
@@ -830,6 +834,8 @@ class RectSelector:
         if tool in {"gallery", "clear_folder"}:
             if hasattr(self, "manager_available"):
                 return self.manager_available
+            if tool == "clear_folder" and hasattr(self, "_clearable_available"):
+                return self._clearable_available
             if hasattr(self, "_manager_available"):
                 return self._manager_available
             try:
@@ -905,8 +911,10 @@ class RectSelector:
     def draw_toolbar(self):
         try:
             self._manager_available = bool(screenshot_files(CONFIG["save_path"]))
+            self._clearable_available = bool(screenshot_files(CONFIG["save_path"], captures_only=True))
         except OSError:
             self._manager_available = False
+            self._clearable_available = False
         self.canvas.delete("toolbar")
         self.toolbar_hitboxes = []
         rect = self.normalized_rect()
@@ -1818,9 +1826,9 @@ class InfershotApp:
                     if hotkey_matches("screenshot_manager", modifiers):
                         if self.selector is not None and self.selector_open:
                             self.selector.draw_toolbar()
-                            self.selector.show_gallery()
+                            self.selector.show_gallery(beside=False)
                         else:
-                            self.gallery.show()
+                            self.gallery.show(bounds=monitor_bbox_at_cursor(work_area=True))
                         continue
                     elif hotkey_matches("fullscreen", modifiers):
                         task = "monitor"

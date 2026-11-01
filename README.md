@@ -118,7 +118,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Screenshot manager – view saved captures; closing the manager resumes the unfinished
   selection with its annotations intact.
 - Clear folder – move screenshot image files to the Infershot recovery folder
-  after confirmation. Other files and subfolders stay in place.
+  after confirmation. Only `ScreenShot-*.*` files are cleared.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
@@ -136,16 +136,19 @@ The manager and Clear folder icons are disabled when that folder has no images.
 The borderless window closes with `Esc` or the corner close icon shown on hover.
 Its square thumbnails have hover
 icons for Copy and Remove; click a thumbnail to include/exclude it. The three
-adjacent action icons are Copy sheet, Save ZIP archive, and Clear history, with
+adjacent action icons are Copy sheet, Save ZIP archive, and Clear screenshot folder, with
 hover tooltips and keyboard focus. The window sizes to its content and wraps
 thumbnails as needed; it has no scrollbars or text action buttons. PNG archives
 export selected immutable snapshots with unique filenames. Sheets preserve each
-image's native resolution and order, with 24 px gutters. Clear history and Remove
-never delete saved files; reopening reloads files from the folder. A new capture
+image's native resolution and order, with 24 px gutters. Remove hides an item
+until reopening reloads files from the folder. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
-action moves all direct PNG/JPG/JPEG/BMP/WebP files to a unique batch under
+action, also available in the manager, moves all direct `ScreenShot-*.*` files to a unique batch under
 `%LOCALAPPDATA%\Infershot\Trash`; `restore.json` records their original folder.
 Move those files back to restore them. It does not recurse into subfolders.
+Thumbnails use 336 px tiles (3× the original size), with page arrows when needed
+instead of scrollbars. The manager opens centered on the current monitor, or
+beside the selection when opened from its toolbar and space permits.
 Legacy `gallery.show_after_capture` and `hotkeys.gallery` settings are ignored.
 
 Click the active toolbar icon again to return to normal selection move mode.

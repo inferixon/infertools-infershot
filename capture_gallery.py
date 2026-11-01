@@ -36,6 +36,15 @@ def icon_image(name, size, glow=False):
         draw.arc(tuple(round(v * scale) for v in (3, 3, 21, 21)), 200, 510,
                  fill=TEXT, width=round(1.8 * scale))
         line(((3, 3), (3, 10), (10, 10)))
+    elif name == "trash":
+        line(((4, 6), (20, 6)))
+        line(((9, 3), (15, 3)))
+        line(((6, 8), (7, 21), (17, 21), (18, 8)))
+        line(((10, 10), (10, 18)))
+        line(((14, 10), (14, 18)))
+    elif name in {"previous", "next"}:
+        direction = 1 if name == "next" else -1
+        line(((12 - direction * 4, 5), (12 + direction * 4, 12), (12 - direction * 4, 19)))
     else:
         line(((5, 5), (19, 19)))
         line(((19, 5), (5, 19)))
@@ -53,6 +62,7 @@ class IconButton(tk.Canvas):
                          highlightthickness=0, borderwidth=0, cursor="hand2", takefocus=True)
         self.icon, self.title, self.command, self.size = icon, title, command, size
         self.hovered, self.focused, self.tooltip, self.tip_timer = False, False, None, None
+        self.enabled = True
         self.bind("<ButtonRelease-1>", lambda _event: self.invoke())
         self.bind("<Return>", lambda _event: self.invoke())
         self.bind("<space>", lambda _event: self.invoke())
@@ -65,15 +75,24 @@ class IconButton(tk.Canvas):
 
     def paint(self):
         self.delete("all")
-        self.photo = ImageTk.PhotoImage(icon_image(self.icon, self.size - 6, self.hovered), master=self)
+        icon = icon_image(self.icon, self.size - 6, self.hovered and self.enabled)
+        if not self.enabled:
+            icon.putalpha(icon.getchannel("A").point(lambda value: value // 3))
+        self.photo = ImageTk.PhotoImage(icon, master=self)
         self.create_image(self.size / 2, self.size / 2, image=self.photo)
         if self.focused:
             self.create_rectangle(1, 1, self.size - 2, self.size - 2, outline="#9cbad4")
 
     def invoke(self):
         self.leave()
-        self.command()
+        if self.enabled:
+            self.command()
         return "break"
+
+    def set_enabled(self, enabled):
+        self.enabled = enabled
+        self.configure(cursor="hand2" if enabled else "arrow", takefocus=enabled)
+        self.paint()
 
     def focus(self, value):
         self.focused = value
@@ -116,6 +135,9 @@ class CaptureGallery:
         self.photos = []
         self.on_close = None
         self.settings = settings
+        self.anchor = None
+        self.bounds = None
+        self.page = 0
 
     def folder_files(self):
         return screenshot_files(self.settings()["save_path"]) if self.settings else []
@@ -144,12 +166,12 @@ class CaptureGallery:
         if self.settings is None:
             return
         try:
-            files = self.folder_files()
+            files = screenshot_files(self.settings()["save_path"], captures_only=True)
             if not files:
                 return
             folder = self.settings()["save_path"]
             if not messagebox.askyesno("Clear screenshot folder",
-                    f"Move {len(files)} screenshots from\n{folder}\nto the Infershot recovery folder?\nOther files and subfolders stay in place.",
+                    f"Clear all {len(files)} ScreenShot-*.* files from\n{folder}?\nFiles go to the Infershot recovery folder.",
                     parent=parent or self.window or self.root):
                 return
             recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
@@ -180,8 +202,9 @@ class CaptureGallery:
         if callback is not None:
             callback()
 
-    def show(self, on_close=None):
+    def show(self, on_close=None, anchor=None, bounds=None):
         self.on_close = on_close
+        self.anchor, self.bounds, self.page = anchor, bounds, 0
         try:
             self.sync_folder()
         except OSError as error:
@@ -208,10 +231,15 @@ class CaptureGallery:
             self.action_buttons = []
             for icon, title, action in (("copy", "Copy sheet", self.copy_sheet),
                                          ("archive", "Save ZIP archive", self.export_archive),
-                                         ("clear", "Clear history", self.clear)):
+                                         ("trash", "Clear screenshot folder – ScreenShot-*.*", self.clear_folder)):
                 button = IconButton(self.actions, icon, title, action)
                 button.pack(side="left", padx=3)
                 self.action_buttons.append(button)
+            self.pagination = tk.Frame(self.window, background=BG)
+            self.previous_button = IconButton(self.pagination, "previous", "Previous screenshots", lambda: self.change_page(-1))
+            self.previous_button.pack(side="left", padx=3)
+            self.next_button = IconButton(self.pagination, "next", "Next screenshots", lambda: self.change_page(1))
+            self.next_button.pack(side="left", padx=3)
             self.status = tk.StringVar(master=self.window)
             self.cards = tk.Frame(self.window, background=BG)
             self.cards.pack(padx=8, pady=(26, 8))
@@ -236,21 +264,36 @@ class CaptureGallery:
         for widget in self.cards.winfo_children():
             widget.destroy()
         self.photos = []
-        available_w = max(200, self.window.winfo_screenwidth() - 80)
-        available_h = max(180, self.window.winfo_screenheight() - 120)
-        tile = 112
+        bounds = self.bounds or (0, 0, self.window.winfo_screenwidth(), self.window.winfo_screenheight())
+        left, top, right, bottom = bounds
+        available_w, available_h = right - left - 32, bottom - top - 32
+        tile = max(1, min(336, available_w - 24, available_h - 80))
+        if self.anchor:
+            room_right, room_left = right - self.anchor[2] - 28, self.anchor[0] - left - 28
+            side_room = room_right if room_right >= tile + 24 else room_left
+            if side_room >= tile + 24:
+                available_w = side_room
         count = max(1, len(self.items))
-        while True:
-            columns = max(1, min(count, 6, int(available_w // (tile + 8))))
-            rows = math.ceil(count / columns)
-            if rows * (tile + 8) + 50 <= available_h or tile <= 48:
-                break
-            tile -= 8
+        columns = max(1, min(count, 6, int((available_w - 16) // (tile + 8))))
+        rows = max(1, int((available_h - 80) // (tile + 8)))
+        self.page_size = columns * rows
+        pages = max(1, math.ceil(len(self.items) / self.page_size))
+        self.page = min(self.page, pages - 1)
+        if pages > 1:
+            self.pagination.pack(side="bottom", anchor="w", padx=8, pady=(0, 6), before=self.cards)
+        else:
+            self.pagination.pack_forget()
+        self.previous_button.set_enabled(self.page > 0)
+        self.next_button.set_enabled(self.page + 1 < pages)
+        self.tile_size = tile
+        if self.settings:
+            self.action_buttons[2].set_enabled(bool(screenshot_files(self.settings()["save_path"], captures_only=True)))
         if not self.items:
             tk.Label(self.cards, text="Capture a region or monitor to add a screenshot.",
                      background=BG, foreground=MUTED, font=("Palatino Linotype", 11)).pack(padx=8, pady=20)
         self.card_controls = []
-        for index, item in enumerate(self.items):
+        start = self.page * self.page_size
+        for index, item in enumerate(self.items[start:start + self.page_size]):
             card = tk.Frame(self.cards, background=BG, width=tile, height=tile,
                             highlightthickness=1, highlightbackground="#9cbad4" if item["selected"] else "#505967",
                             takefocus=True)
@@ -294,9 +337,19 @@ class CaptureGallery:
         self.update_status()
         self.window.update_idletasks()
         width, height = self.window.winfo_reqwidth(), self.window.winfo_reqheight()
-        x = max(0, (self.window.winfo_screenwidth() - width) // 2)
-        y = max(0, self.window.winfo_screenheight() - height - 64)
+        x, y = left + (right - left - width) // 2, top + (bottom - top - height) // 2
+        if self.anchor:
+            if self.anchor[2] + 12 + width <= right - 16:
+                x = self.anchor[2] + 12
+            elif self.anchor[0] - 12 - width >= left + 16:
+                x = self.anchor[0] - 12 - width
+        # Negative desktop coordinates are absolute positions, not Tk's
+        # negative geometry offsets from the right/bottom screen edge.
         self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def change_page(self, delta):
+        self.page = max(0, self.page + delta)
+        self.refresh()
 
     def update_status(self, message=None):
         if self.status is not None:
