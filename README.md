@@ -140,8 +140,10 @@ adjacent action icons are Copy sheet, Save ZIP archive, and Clear screenshot fol
 hover tooltips and keyboard focus. The window sizes to its content and wraps
 thumbnails as needed; it has no scrollbars or text action buttons. PNG archives
 export selected immutable snapshots with unique filenames. Sheets preserve each
-image's native resolution and order, with 24 px gutters. Remove hides an item
-until reopening reloads files from the folder. A new capture
+image's native resolution and order, with 24 px gutters.
+Copy sheet also saves `ScreenSheet-001`, `ScreenSheet-002`, etc. in `save_path`,
+using the configured image format and quality, with separate screenshot numbering.
+Remove hides an item until reopening reloads files from the folder. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
 action, also available in the manager, moves all direct `ScreenShot-*.*` files to a unique batch under
 `%LOCALAPPDATA%\Infershot\Trash`; `restore.json` records their original folder.

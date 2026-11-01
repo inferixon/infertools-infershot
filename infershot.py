@@ -382,39 +382,51 @@ def monitor_bbox_at_cursor(work_area=False):
     return rect.left, rect.top, rect.right, rect.bottom
 
 
-def next_path():
+def next_path(filename_mask=None):
     capture_dir = Path(CONFIG["save_path"])
     capture_dir.mkdir(parents=True, exist_ok=True)
+    mask = filename_mask or CONFIG["filename_mask"]
+    pattern = FILE_RE
+    if filename_mask is not None:
+        mask_pattern = re.escape(mask).replace(re.escape("{nnn}"), r"(\d+)")
+        extension = r"jpe?g" if CONFIG["format"] == "jpg" else re.escape(CONFIG["format"])
+        pattern = re.compile(rf"^{mask_pattern}\.{extension}$", re.IGNORECASE)
     highest = 0
     for item in capture_dir.iterdir():
         if not item.is_file():
             continue
-        match = FILE_RE.match(item.name)
+        match = pattern.match(item.name)
         if match:
             highest = max(highest, int(match.group(1)))
 
     number = highest + 1
     while True:
-        stem = CONFIG["filename_mask"].replace("{nnn}", f"{number:03d}")
+        stem = mask.replace("{nnn}", f"{number:03d}")
         path = capture_dir / f"{stem}.{CONFIG['format']}"
         if not path.exists():
             return path
         number += 1
 
 
-def save_capture(image):
-    path = next_path()
+def save_image(image, filename_mask=None):
+    path = next_path(filename_mask)
     image = image.convert("RGB")
     if CONFIG["format"] == "png":
         image.save(path, "PNG", optimize=True)
     else:
         image.save(path, "JPEG", quality=CONFIG["quality"], optimize=True)
+    log(f"saved {path}")
+    return path
+
+
+def save_capture(image):
+    image = image.convert("RGB")
+    path = save_image(image)
     if CONFIG["copy_to_clipboard"]:
         try:
             copy_image_to_clipboard(image)
         except OSError as error:
             log(f"capture saved; clipboard unavailable: {error!r}")
-    log(f"saved {path}")
     if CAPTURE_CALLBACK is not None:
         CAPTURE_CALLBACK(image.copy(), path)
     return path
@@ -1779,7 +1791,8 @@ class InfershotApp:
         self.root.report_callback_exception = log_exception
         self.root.withdraw()
         self.root.title("INFERSHOT")
-        self.gallery = CaptureGallery(self.root, copy_image_to_clipboard, lambda: CONFIG)
+        self.gallery = CaptureGallery(self.root, copy_image_to_clipboard, lambda: CONFIG,
+                                      lambda image: save_image(image, "ScreenSheet-{nnn}"))
         CAPTURE_CALLBACK = lambda image, path: self.tasks.put(("saved", image, path))
         self.root.after(60, self.drain_tasks)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)

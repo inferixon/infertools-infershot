@@ -126,7 +126,7 @@ class IconButton(tk.Canvas):
 
 
 class CaptureGallery:
-    def __init__(self, root, copy_image, settings=None):
+    def __init__(self, root, copy_image, settings=None, save_sheet=None):
         self.root = root
         self.copy_image = copy_image
         self.items = []
@@ -135,6 +135,7 @@ class CaptureGallery:
         self.photos = []
         self.on_close = None
         self.settings = settings
+        self.save_sheet = save_sheet
         self.anchor = None
         self.bounds = None
         self.page = 0
@@ -389,8 +390,14 @@ class CaptureGallery:
             for item, (x, y, _w, _h) in zip(selected, cells):
                 with Image.open(io.BytesIO(item["data"])) as image:
                     sheet.paste(image.convert("RGB"), (x, y))
-            self.copy_image(sheet)
-            self.update_status(f"Copied sheet – {size[0]} × {size[1]}")
+            path = self.save_sheet(sheet) if self.save_sheet else None
+            try:
+                self.copy_image(sheet)
+            except Exception as error:
+                self.update_status(f"Saved {path.name}; clipboard failed: {error}" if path else str(error))
+                return
+            saved = f"Saved {path.name}; " if path else ""
+            self.update_status(f"{saved}Copied sheet – {size[0]} × {size[1]}")
         except Exception as error:
             self.update_status(str(error))
 
