@@ -2,7 +2,7 @@
 
 ## 1.5
 
-- Screenshot manager
+- Added Screenshot manager
 
 ## 1.4
 
