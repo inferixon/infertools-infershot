@@ -118,7 +118,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Screenshot manager – view saved captures; closing the manager resumes the unfinished
   selection with its annotations intact.
 - Clear folder – move screenshot image files to the Infershot recovery folder
-  after confirmation. Only `ScreenShot-*.*` files are cleared.
+  immediately. Only `ScreenShot-*.*` files are cleared.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest

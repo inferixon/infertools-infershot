@@ -170,10 +170,6 @@ class CaptureGallery:
             if not files:
                 return
             folder = self.settings()["save_path"]
-            if not messagebox.askyesno("Clear screenshot folder",
-                    f"Clear all {len(files)} ScreenShot-*.* files from\n{folder}?\nFiles go to the Infershot recovery folder.",
-                    parent=parent or self.window or self.root):
-                return
             recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
             clear_screenshot_folder(folder, recovery, files)
             self.sync_folder()
