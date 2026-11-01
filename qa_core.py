@@ -28,10 +28,17 @@ def screenshot_files(folder):
 def clear_screenshot_folder(folder, recovery_root, files):
     """Move only the confirmed direct files into a unique recoverable batch."""
     folder = Path(folder).resolve()
-    allowed = set(screenshot_files(folder))
-    files = [Path(path) for path in files]
-    if any(path not in allowed or path.resolve().parent != folder for path in files):
-        raise ValueError("Screenshot folder changed; review and confirm again")
+    allowed = {path.resolve() for path in screenshot_files(folder)}
+    confirmed = []
+    for original in files:
+        path = Path(original)
+        if path.is_symlink():
+            raise ValueError("Screenshot folder changed; review and confirm again")
+        path = path.resolve()
+        if path not in allowed or path.parent != folder or path in confirmed:
+            raise ValueError("Screenshot folder changed; review and confirm again")
+        confirmed.append(path)
+    files = confirmed
     if not files:
         return None
     recovery_root = Path(recovery_root)

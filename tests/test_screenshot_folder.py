@@ -73,7 +73,7 @@ class ScreenshotFolderTests(unittest.TestCase):
             import shutil
             real_move = shutil.move
             def fail_second(source, destination):
-                if Path(source) == second:
+                if Path(source) == second.resolve():
                     raise PermissionError("File is busy")
                 return real_move(source, destination)
             with patch("qa_core.shutil.move", side_effect=fail_second):
@@ -83,6 +83,15 @@ class ScreenshotFolderTests(unittest.TestCase):
             batches = list((root / "trash").iterdir())
             self.assertEqual((batches[0] / first.name).read_bytes(), b"first")
             self.assertTrue((batches[0] / "restore.json").exists())
+
+    def test_equivalent_relative_file_path_is_normalized(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            image = root / "one.png"
+            image.write_bytes(b"one")
+            relative = image.relative_to(Path.cwd())
+            batch = clear_screenshot_folder(root, root / "trash", [relative])
+            self.assertEqual((batch / image.name).read_bytes(), b"one")
 
 
 if __name__ == "__main__":
