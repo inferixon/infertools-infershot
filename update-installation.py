@@ -11,7 +11,7 @@ import shutil
 import tempfile
 
 
-FILES = ("infershot.py", "runtime_state.py", "run-infershot.bat", "stop-infershot.ps1",
+FILES = ("infershot.py", "runtime_state.py", "qa_core.py", "capture_gallery.py", "run-infershot.bat", "stop-infershot.ps1",
          "update-installation.py", "requirements.txt")
 
 

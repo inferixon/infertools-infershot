@@ -13,9 +13,11 @@ and adds colored annotations before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Floating translucent buttons for freehand, line, arrow, double arrow, rectangle, cross, question mark, text, eraser, and configured colors
+- Selection-anchored buttons for freehand, line, arrow, double arrow, rectangle, cross, question mark, Fix this, text, Undo/Redo, eraser, gallery, stroke widths, and configured colors
 - DPI-matched text preview with a live keyboard layout and Caps Lock indicator
-- Two-click line and arrow annotations in the selected color
+- Drag or two-click line, arrow, double-arrow, and rectangle annotations
+- Per-annotation stroke width and scalable repair stamps
+- Recent screenshot gallery with individual copy and full-resolution Copy sheet
 - Automatic numbered filenames
 - Optional clipboard copy
 - Configurable capture, annotation, save, and cancel hotkeys
@@ -75,6 +77,8 @@ after updating: run its `stop-infershot.ps1`, then `run-infershot.bat`.
 | Start an arrow | `Ctrl+RightMouse` |
 | Finish the active arrow | `RightMouse` |
 | Undo the last annotation action | `Ctrl+Z` |
+| Redo an annotation action | `Ctrl+Shift+Z` or `Ctrl+Y` |
+| Open the gallery from the selection | `Ctrl+G` |
 | Save the selected capture | `Enter` |
 | Cancel the pending annotation or capture | `Escape` |
 
@@ -83,32 +87,54 @@ annotation, the selection can be moved from its interior or resized with its han
 The second arrow click marks the arrow tip. Completed annotations are included in
 both the saved image and the clipboard image. If a line or arrow has been started
 but not finished, `Escape` removes only that pending annotation. With no pending
-annotation, `Escape` cancels the capture.
+annotation or drawing mode, `Escape` cancels the capture. When a drawing tool is
+active, the first `Escape` cancels its pending edit and restores selection mode;
+the next `Escape` closes the capture.
 
 After selecting a rectangle, use the floating buttons above its left edge. The
 button group has no panel; each rounded button uses a faint border, a translucent
 fill, wider spacing, and a subtle white hover glow. The tools appear in this order:
 
 - Freehand – hold and drag the left mouse button.
-- Line – click the start and end points.
-- Arrow – click the start point, then the arrow tip.
-- Double arrow – click the two endpoints to add arrowheads at both ends.
-- Rectangle – hold and drag the left mouse button to frame an area.
+- Line – drag, or click the start and end points.
+- Arrow – drag, or click the start point and then the arrow tip.
+- Double arrow – drag or use two clicks to add arrowheads at both ends.
+- Rectangle – drag or click opposite corners to frame an area.
 - Cross – click once for the configured size, or hold and drag to resize X.
 - Question mark – click once for the configured size, or hold and drag to resize `?`.
+- Fix this – place a repair-tools stamp; click for the default size or drag to resize.
 - Text – click inside the selection for the configured font size, or hold and
   drag a text frame to set its size. Typing expands the transparent, border-only
   frame as needed. A compact status shows the active `EN`, `NO`, or `UA` layout
   and Caps Lock state. `Enter` starts a new line, `Ctrl+Enter` commits the text,
   and `Escape` cancels the active text editor.
+- Undo/Redo – step through annotation actions, including clearing with Eraser.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
+- Gallery – view recent captures; closing the gallery resumes the unfinished
+  selection with its annotations intact.
+- Stroke widths – select a configured width for subsequent shapes and freehand
+  marks. Existing annotations and text sizes stay unchanged.
 - Color circles – select the color for subsequent annotations. They follow the
   tool buttons in the order listed in `colors`; the count matches that list.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
 `undo_limit` states (20 by default).
+
+Redo uses `Ctrl+Shift+Z` or `Ctrl+Y`; a new drawing action clears the redo branch.
+The toolbar stays anchored to the selection and cannot be dragged independently.
+
+## Recent screenshots
+
+The gallery opens after a capture by default. Copy one image, select screenshots
+for Copy sheet, or remove items from history. Sheets preserve each image's native
+resolution and order, with 24 px gutters. Clear history and Remove never delete
+saved files. Captures are immutable in-memory copies limited to the most recent
+`gallery.limit` images; they are cleared when Infershot exits. Original files stay
+in the configured screenshot folder. Set `gallery.show_after_capture` to `false`
+to keep the immediate-save workflow; open the gallery from the selection toolbar
+or with `Ctrl+G`. A new capture hides the gallery before grabbing the desktop.
 
 Click the active toolbar icon again to return to normal selection move mode.
 Resize handles always remain available, including after annotations are added.
@@ -125,6 +151,8 @@ Resize handles always remain available, including after annotations are added.
   "filename_mask": "ScreenShot-{nnn}",
   "copy_to_clipboard": true,
   "undo_limit": 20,
+  "stroke": {"width": 5, "choices": [3, 5, 9]},
+  "gallery": {"limit": 20, "show_after_capture": true},
   "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",
@@ -136,6 +164,7 @@ Resize handles always remain available, including after annotations are added.
   "question": {
     "size": 48
   },
+  "repair": {"size": 48},
   "hotkeys": {
     "rectangle": "PrintScreen",
     "fullscreen": "Ctrl+PrintScreen",
@@ -145,6 +174,9 @@ Resize handles always remain available, including after annotations are added.
     "arrow_finish": "RightMouse",
     "save": "Enter",
     "undo": "Ctrl+Z",
+    "redo": "Ctrl+Shift+Z",
+    "redo_alternative": "Ctrl+Y",
+    "gallery": "Ctrl+G",
     "cancel": "Escape"
   }
 }
@@ -163,6 +195,8 @@ The question mark has its own `question.size` default and uses the same drag
 gesture. `colors` accepts `#RRGGBB` values in display order; an empty list hides
 the color buttons and keeps the built-in red fallback. Each completed annotation
 keeps its chosen color when another color is selected or an action is undone.
+Stroke widths accept integer values from 1–24 px, with 3/5/9 px shown by default.
+`repair.size` uses the same 16–256 px sizing range as the other drag-sized stamps.
 
 ## Runtime state
 

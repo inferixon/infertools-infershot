@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4
+
+- Added Redo and configurable stroke widths.
+- Added drag/two-click shapes and staged Escape cancellation.
+- Added a resizable Fix this stamp.
+- Added a recent-capture gallery and full-resolution Copy sheet.
+
 ## 1.3
 
 - Added configurable annotation colors.
