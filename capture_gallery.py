@@ -1,14 +1,15 @@
-"""Session-local screenshot gallery and native-resolution clipboard sheets."""
+"""Folder-backed screenshot manager and native-resolution clipboard sheets."""
 
 import io
 import math
+import os
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
-from qa_core import sheet_layout, write_capture_archive
+from qa_core import sheet_layout, write_capture_archive, screenshot_files, clear_screenshot_folder
 
 
 BG, PANEL, TEXT, MUTED = "#171a21", "#222630", "#eef2f7", "#9ca8b8"
@@ -106,7 +107,7 @@ class IconButton(tk.Canvas):
 
 
 class CaptureGallery:
-    def __init__(self, root, copy_image):
+    def __init__(self, root, copy_image, settings=None):
         self.root = root
         self.copy_image = copy_image
         self.items = []
@@ -114,6 +115,53 @@ class CaptureGallery:
         self.status = None
         self.photos = []
         self.on_close = None
+        self.settings = settings
+
+    def folder_files(self):
+        return screenshot_files(self.settings()["save_path"]) if self.settings else []
+
+    def sync_folder(self):
+        if not self.settings:
+            return
+        settings = self.settings()
+        previous = {item["path"]: item["selected"] for item in self.items}
+        self.items = []
+        for path in self.folder_files():
+            try:
+                with Image.open(path) as image:
+                    if image.width * image.height > 100_000_000:
+                        continue
+                    buffer = io.BytesIO()
+                    image.convert("RGB").save(buffer, "PNG")
+                    self.items.append({"path": path, "data": buffer.getvalue(),
+                                       "size": image.size, "selected": previous.get(path, True)})
+            except (OSError, ValueError, Image.DecompressionBombError):
+                continue
+            if len(self.items) >= settings["gallery"]["limit"]:
+                break
+
+    def clear_folder(self, parent=None):
+        if self.settings is None:
+            return
+        try:
+            files = self.folder_files()
+            if not files:
+                return
+            folder = self.settings()["save_path"]
+            if not messagebox.askyesno("Clear screenshot folder",
+                    f"Move {len(files)} screenshots from\n{folder}\nto the Infershot recovery folder?\nOther files and subfolders stay in place.",
+                    parent=parent or self.window or self.root):
+                return
+            recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
+            clear_screenshot_folder(folder, recovery, files)
+            self.sync_folder()
+            if self.window is not None:
+                self.refresh()
+                if not self.items:
+                    self.hide()
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Clear screenshot folder", f"{error}\nRecovery folder: {recovery if 'recovery' in locals() else 'unchanged'}",
+                                 parent=parent or self.window or self.root)
 
     def add(self, image, path, limit=20):
         buffer = io.BytesIO()
@@ -133,14 +181,27 @@ class CaptureGallery:
 
     def show(self, on_close=None):
         self.on_close = on_close
+        try:
+            self.sync_folder()
+        except OSError as error:
+            messagebox.showerror("Screenshot manager", str(error), parent=self.root)
+            self.hide()
+            return
+        if not self.items:
+            self.hide()
+            return
         if self.window is None or not self.window.winfo_exists():
             self.window = tk.Toplevel(self.root, background=BG)
             self.window.withdraw()
-            self.window.title("Infershot – recent screenshots")
+            self.window.title("Infershot – screenshot manager")
+            self.window.overrideredirect(True)
+            self.window.attributes("-topmost", True)
             self.window.resizable(False, False)
             self.window.protocol("WM_DELETE_WINDOW", self.hide)
             self.window.bind("<Escape>", lambda _event: self.hide())
-            self.window.bind("<Control-g>", lambda _event: self.hide())
+            self.close_button = IconButton(self.window, "remove", "Close – Esc", self.hide, size=24)
+            self.window.bind("<Enter>", self.show_close, add="+")
+            self.window.bind("<Leave>", lambda _event: self.window.after_idle(self.hide_close), add="+")
             self.actions = tk.Frame(self.window, background=BG)
             self.actions.pack(side="bottom", anchor="e", padx=8, pady=(0, 6))
             self.action_buttons = []
@@ -152,11 +213,23 @@ class CaptureGallery:
                 self.action_buttons.append(button)
             self.status = tk.StringVar(master=self.window)
             self.cards = tk.Frame(self.window, background=BG)
-            self.cards.pack(padx=8, pady=8)
+            self.cards.pack(padx=8, pady=(26, 8))
         self.refresh()
         self.window.deiconify()
         self.window.lift()
         self.window.focus_force()
+
+    def show_close(self, _event=None):
+        self.close_button.place(relx=1, x=-26, y=1)
+        tk.Misc.lift(self.close_button)
+
+    def hide_close(self):
+        if self.window is None or not self.window.winfo_exists():
+            return
+        x, y = self.window.winfo_pointerxy()
+        if not (self.window.winfo_rootx() <= x < self.window.winfo_rootx() + self.window.winfo_width()
+                and self.window.winfo_rooty() <= y < self.window.winfo_rooty() + self.window.winfo_height()):
+            self.close_button.place_forget()
 
     def refresh(self):
         for widget in self.cards.winfo_children():
@@ -219,13 +292,16 @@ class CaptureGallery:
                 widget.bind("<FocusOut>", lambda event, action=conceal: self.window.after_idle(action), add="+")
         self.update_status()
         self.window.update_idletasks()
-        self.window.geometry(f"{self.window.winfo_reqwidth()}x{self.window.winfo_reqheight()}")
+        width, height = self.window.winfo_reqwidth(), self.window.winfo_reqheight()
+        x = max(0, (self.window.winfo_screenwidth() - width) // 2)
+        y = max(0, self.window.winfo_screenheight() - height - 64)
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
 
     def update_status(self, message=None):
         if self.status is not None:
             count = sum(item["selected"] for item in self.items)
             self.status.set(message or f"{count} selected / {len(self.items)} captures")
-            self.window.title("Infershot – " + self.status.get())
+            self.window.title("Infershot – screenshot manager – " + self.status.get())
 
     def export_archive(self, destination=None):
         selected = [item for item in self.items if item["selected"]]

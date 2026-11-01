@@ -6,7 +6,7 @@
   "copy_to_clipboard": true,
   "undo_limit": 20,
   "stroke": {"width": 5, "choices": [3, 5, 9]},
-  "gallery": {"limit": 20, "show_after_capture": true},
+  "gallery": {"limit": 20},
   "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",
@@ -30,7 +30,7 @@
     "undo": "Ctrl+Z",
     "redo": "Ctrl+Shift+Z",
     "redo_alternative": "Ctrl+Y",
-    "gallery": "Ctrl+G",
+    "screenshot_manager": "Shift+PrintScreen",
     "cancel": "Escape"
   }
 }

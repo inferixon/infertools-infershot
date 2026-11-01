@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5 – Screenshot manager
+
+- Open screenshots from the save folder with the toolbar or `Shift+PrintScreen`.
+- Borderless manager with hover close and `Esc`; no automatic popups.
+- Disabled manager button for an empty folder; recoverable folder clearing.
+
 ## 1.4
 
 - Added Redo and configurable stroke widths.

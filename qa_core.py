@@ -1,11 +1,49 @@
 """Annotation history and contact-sheet geometry, independent of the GUI."""
 
 import copy
+import json
 import math
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import zipfile
+
+
+def screenshot_files(folder):
+    """List direct image files, newest first; never follow links or subfolders."""
+    folder = Path(folder)
+    if not folder.exists():
+        return []
+    entries = []
+    for path in folder.iterdir():
+        try:
+            if not path.is_symlink() and path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}:
+                entries.append((path.stat().st_mtime_ns, path.name.casefold(), path))
+        except FileNotFoundError:
+            continue
+    return [path for _, _, path in sorted(entries, reverse=True)]
+
+
+def clear_screenshot_folder(folder, recovery_root, files):
+    """Move only the confirmed direct files into a unique recoverable batch."""
+    folder = Path(folder).resolve()
+    allowed = set(screenshot_files(folder))
+    files = [Path(path) for path in files]
+    if any(path not in allowed or path.resolve().parent != folder for path in files):
+        raise ValueError("Screenshot folder changed; review and confirm again")
+    if not files:
+        return None
+    recovery_root = Path(recovery_root)
+    recovery_root.mkdir(parents=True, exist_ok=True)
+    batch = Path(tempfile.mkdtemp(prefix="screenshots-", dir=recovery_root))
+    manifest = {"source": str(folder), "files": [path.name for path in files]}
+    (batch / "restore.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    # A failed move leaves every file either at its original path or in this
+    # documented recovery batch. No overwrite or permanent deletion is used.
+    for path in files:
+        shutil.move(str(path), str(batch / path.name))
+    return batch
 
 
 class AnnotationHistory:

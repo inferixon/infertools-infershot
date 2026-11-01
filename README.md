@@ -13,11 +13,11 @@ and adds colored annotations before saving a selected region.
 - Rectangle capture across the Windows virtual desktop
 - Full-monitor capture for the monitor under the cursor
 - Movable and resizable selection rectangle
-- Selection-anchored buttons for freehand, line, arrow, double arrow, rectangle, cross, question mark, Fix this, text, Undo/Redo, eraser, gallery, stroke widths, and configured colors
+- Selection-anchored buttons for freehand, line, arrows, rectangle, stamps, text, colors, stroke widths, Undo/Redo, eraser, Screenshot manager, and Clear folder
 - DPI-matched text preview with a live keyboard layout and Caps Lock indicator
 - Drag or two-click line, arrow, double-arrow, and rectangle annotations
 - Per-annotation stroke width and scalable repair stamps
-- Recent screenshot gallery with individual copy, PNG ZIP archives, and full-resolution Copy sheet
+- Screenshot manager for saved files, individual copy, PNG ZIP archives, and full-resolution Copy sheet
 - Automatic numbered filenames
 - Optional clipboard copy
 - Configurable capture, annotation, save, and cancel hotkeys
@@ -78,7 +78,7 @@ after updating: run its `stop-infershot.ps1`, then `run-infershot.bat`.
 | Finish the active arrow | `RightMouse` |
 | Undo the last annotation action | `Ctrl+Z` |
 | Redo an annotation action | `Ctrl+Shift+Z` or `Ctrl+Y` |
-| Open the gallery from the selection | `Ctrl+G` |
+| Open Screenshot manager | `Shift+PrintScreen` |
 | Save the selected capture | `Enter` |
 | Cancel the pending annotation or capture | `Escape` |
 
@@ -115,8 +115,10 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Undo/Redo – after a wider gap, step through annotation actions, including clearing with Eraser.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
-- Gallery – view recent captures; closing the gallery resumes the unfinished
+- Screenshot manager – view saved captures; closing the manager resumes the unfinished
   selection with its annotations intact.
+- Clear folder – move screenshot image files to the Infershot recovery folder
+  after confirmation. Other files and subfolders stay in place.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
@@ -125,20 +127,26 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 Redo uses `Ctrl+Shift+Z` or `Ctrl+Y`; a new drawing action clears the redo branch.
 The toolbar stays anchored to the selection and cannot be dragged independently.
 
-## Recent screenshots
+## Screenshot manager – 1.5
 
-The gallery opens after a capture by default. Its square thumbnails have hover
+Open the manager with `Shift+PrintScreen` or its selection-toolbar icon. It never
+opens automatically after capture. The manager reads the most recent
+`gallery.limit` images from `save_path`, including files saved before restart.
+The manager and Clear folder icons are disabled when that folder has no images.
+The borderless window closes with `Esc` or the corner close icon shown on hover.
+Its square thumbnails have hover
 icons for Copy and Remove; click a thumbnail to include/exclude it. The three
 adjacent action icons are Copy sheet, Save ZIP archive, and Clear history, with
 hover tooltips and keyboard focus. The window sizes to its content and wraps
 thumbnails as needed; it has no scrollbars or text action buttons. PNG archives
 export selected immutable snapshots with unique filenames. Sheets preserve each
 image's native resolution and order, with 24 px gutters. Clear history and Remove
-never delete saved files. Captures are immutable in-memory copies limited to the most recent
-`gallery.limit` images; they are cleared when Infershot exits. Original files stay
-in the configured screenshot folder. Set `gallery.show_after_capture` to `false`
-to keep the immediate-save workflow; open the gallery from the selection toolbar
-or with `Ctrl+G`. A new capture hides the gallery before grabbing the desktop.
+never delete saved files; reopening reloads files from the folder. A new capture
+hides the manager before grabbing the desktop. The separate Clear folder toolbar
+action moves all direct PNG/JPG/JPEG/BMP/WebP files to a unique batch under
+`%LOCALAPPDATA%\Infershot\Trash`; `restore.json` records their original folder.
+Move those files back to restore them. It does not recurse into subfolders.
+Legacy `gallery.show_after_capture` and `hotkeys.gallery` settings are ignored.
 
 Click the active toolbar icon again to return to normal selection move mode.
 Resize handles always remain available, including after annotations are added.
@@ -156,7 +164,7 @@ Resize handles always remain available, including after annotations are added.
   "copy_to_clipboard": true,
   "undo_limit": 20,
   "stroke": {"width": 5, "choices": [3, 5, 9]},
-  "gallery": {"limit": 20, "show_after_capture": true},
+  "gallery": {"limit": 20},
   "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",
@@ -180,7 +188,7 @@ Resize handles always remain available, including after annotations are added.
     "undo": "Ctrl+Z",
     "redo": "Ctrl+Shift+Z",
     "redo_alternative": "Ctrl+Y",
-    "gallery": "Ctrl+G",
+    "screenshot_manager": "Shift+PrintScreen",
     "cancel": "Escape"
   }
 }

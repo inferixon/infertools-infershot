@@ -19,7 +19,7 @@ from PIL import ImageDraw, ImageEnhance, ImageFont, ImageGrab, ImageTk
 
 from runtime_state import (acquire_session_mutex, current_session_id,
                            remove_owned_pid, state_directory, write_pid)
-from qa_core import AnnotationHistory, repair_polygons
+from qa_core import AnnotationHistory, repair_polygons, screenshot_files
 from capture_gallery import CaptureGallery
 
 
@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     "copy_to_clipboard": True,
     "undo_limit": 20,
     "stroke": {"width": 5, "choices": [3, 5, 9]},
-    "gallery": {"limit": 20, "show_after_capture": True},
+    "gallery": {"limit": 20},
     "colors": ["#ff2020", "#22c55e"],
     "text": {
         "font_family": "Palatino Linotype",
@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
         "undo": "Ctrl+Z",
         "redo": "Ctrl+Shift+Z",
         "redo_alternative": "Ctrl+Y",
-        "gallery": "Ctrl+G",
+        "screenshot_manager": "Shift+PrintScreen",
         "cancel": "Escape"
     }
 }
@@ -212,7 +212,6 @@ def load_config():
     if config["stroke"]["width"] not in config["stroke"]["choices"]:
         config["stroke"]["choices"].append(config["stroke"]["width"])
     config["gallery"]["limit"] = max(1, min(50, int(config["gallery"]["limit"])))
-    config["gallery"]["show_after_capture"] = bool(config["gallery"]["show_after_capture"])
     colors = config["colors"]
     if not isinstance(colors, list) or any(
         not isinstance(color, str) or re.fullmatch(r"#[0-9a-fA-F]{6}", color) is None
@@ -472,15 +471,16 @@ class RectSelector:
     ANNOTATION_WIDTH = 5
     ARROW_HEAD_LENGTH = 27
     ARROW_HEAD_ANGLE = math.radians(28)
-    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "double_arrow", "rectangle", "cross", "question", "repair", "text", "undo", "redo", "eraser", "gallery")
+    TOOLBAR_TOOLS = ("freehand", "line", "arrow", "double_arrow", "rectangle", "cross", "question", "repair", "text", "undo", "redo", "eraser", "gallery", "clear_folder")
     TOOLBAR_BUTTON = 34
     TOOLBAR_GAP = 8
     TOOLBAR_RADIUS = 8
     TOOLBAR_MARGIN = 8
 
-    def __init__(self, root, on_gallery=None):
+    def __init__(self, root, on_gallery=None, on_clear_folder=None):
         self.root = root
         self.on_gallery = on_gallery
+        self.on_clear_folder = on_clear_folder
         self.vleft, self.vtop, self.vright, self.vbottom = get_virtual_screen()
         self.width = self.vright - self.vleft
         self.height = self.vbottom - self.vtop
@@ -570,7 +570,6 @@ class RectSelector:
         self.bind_hotkey("undo", self.undo)
         self.bind_hotkey("redo", self.redo)
         self.bind_hotkey("redo_alternative", self.redo)
-        self.bind_hotkey("gallery", self.show_gallery)
         self.bind_hotkey("cancel", self.on_cancel)
         self.window.bind("<KeyPress>", self.on_letter_hotkey, add="+")
         self.window.bind("<Motion>", self.on_motion)
@@ -591,7 +590,7 @@ class RectSelector:
             if event.state & mask:
                 modifiers.add(name)
         for name, callback in (("undo", self.undo), ("redo", self.redo),
-                               ("redo_alternative", self.redo), ("gallery", self.show_gallery)):
+                               ("redo_alternative", self.redo)):
             parts = CONFIG["hotkeys"][name].replace(" ", "").lower().replace("control", "ctrl").split("+")
             keys = [part for part in parts if part not in {"ctrl", "shift", "alt"}]
             expected = {part for part in parts if part in {"ctrl", "shift", "alt"}}
@@ -760,8 +759,9 @@ class RectSelector:
         if tool == "eraser":
             self.clear_annotations()
             return
-        if tool in {"undo", "redo", "gallery"}:
-            {"undo": self.undo, "redo": self.redo, "gallery": self.show_gallery}[tool]()
+        if tool in {"undo", "redo", "gallery", "clear_folder"}:
+            {"undo": self.undo, "redo": self.redo, "gallery": self.show_gallery,
+             "clear_folder": self.clear_screenshot_folder}[tool]()
             return
         self.discard_pending()
         self.active_tool = None if self.active_tool == tool else tool
@@ -811,16 +811,31 @@ class RectSelector:
         return "break"
 
     def show_gallery(self, _event=None):
-        if self.on_gallery is not None:
+        if self.on_gallery is not None and self.toolbar_tool_enabled("gallery"):
             self.window.withdraw()
             def resume():
                 if self.window.winfo_exists():
                     self.window.deiconify()
                     self.window.focus_force()
+                    self.draw_toolbar()
             self.root.after_idle(lambda: self.on_gallery(on_close=resume))
         return "break"
 
+    def clear_screenshot_folder(self):
+        if self.on_clear_folder is not None:
+            self.on_clear_folder(parent=self.window)
+            self.draw_toolbar()
+
     def toolbar_tool_enabled(self, tool):
+        if tool in {"gallery", "clear_folder"}:
+            if hasattr(self, "manager_available"):
+                return self.manager_available
+            if hasattr(self, "_manager_available"):
+                return self._manager_available
+            try:
+                return bool(screenshot_files(CONFIG["save_path"]))
+            except OSError:
+                return False
         history = getattr(self, "history", None)
         if tool == "undo":
             return bool(history and history.undo_states) or getattr(self, "pending_annotation", None) is not None
@@ -888,6 +903,10 @@ class RectSelector:
         return self.canvas.create_polygon(points, smooth=True, splinesteps=24, **options)
 
     def draw_toolbar(self):
+        try:
+            self._manager_available = bool(screenshot_files(CONFIG["save_path"]))
+        except OSError:
+            self._manager_available = False
         self.canvas.delete("toolbar")
         self.toolbar_hitboxes = []
         rect = self.normalized_rect()
@@ -1001,6 +1020,13 @@ class RectSelector:
             self.canvas.create_rectangle(left + 6, top + 11, right - 10, bottom - 6, fill="", outline=color, width=2, tags=tags)
             self.canvas.create_line(left + 9, bottom - 10, cx - 2, cy, right - 13, bottom - 10,
                                     fill=color, width=2, tags=tags)
+        elif tool == "clear_folder":
+            self.canvas.create_line(left + 7, top + 10, right - 7, top + 10, fill=color, width=2, tags=tags)
+            self.canvas.create_line(left + 10, top + 12, left + 12, bottom - 7,
+                                    right - 12, bottom - 7, right - 10, top + 12,
+                                    fill=color, width=2, tags=tags)
+            self.canvas.create_line(cx - 4, top + 7, cx + 4, top + 7, fill=color, width=2, tags=tags)
+            self.canvas.create_line(cx, top + 15, cx, bottom - 11, fill=color, width=2, tags=tags)
         else:
             self.canvas.create_polygon(
                 left + 9, bottom - 12,
@@ -1739,12 +1765,13 @@ class InfershotApp:
         self.last_key_time = 0
         self.hook = None
         self.selector_open = False
+        self.selector = None
         self.proc = LowLevelKeyboardProc(self.keyboard_proc)
         self.root = tk.Tk()
         self.root.report_callback_exception = log_exception
         self.root.withdraw()
         self.root.title("INFERSHOT")
-        self.gallery = CaptureGallery(self.root, copy_image_to_clipboard)
+        self.gallery = CaptureGallery(self.root, copy_image_to_clipboard, lambda: CONFIG)
         CAPTURE_CALLBACK = lambda image, path: self.tasks.put(("saved", image, path))
         self.root.after(60, self.drain_tasks)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
@@ -1779,8 +1806,6 @@ class InfershotApp:
                 task = self.tasks.get_nowait()
                 if isinstance(task, tuple) and task[0] == "saved":
                     self.gallery.add(task[1], task[2], CONFIG["gallery"]["limit"])
-                    if CONFIG["gallery"]["show_after_capture"] and not self.selector_open:
-                        self.gallery.show()
                     continue
                 log(f"task {task}")
                 if isinstance(task, tuple) and task[0] == "printscreen":
@@ -1790,7 +1815,14 @@ class InfershotApp:
                         log(f"config reload failed: {error!r}")
                         continue
                     modifiers = task[1]
-                    if hotkey_matches("fullscreen", modifiers):
+                    if hotkey_matches("screenshot_manager", modifiers):
+                        if self.selector is not None and self.selector_open:
+                            self.selector.draw_toolbar()
+                            self.selector.show_gallery()
+                        else:
+                            self.gallery.show()
+                        continue
+                    elif hotkey_matches("fullscreen", modifiers):
                         task = "monitor"
                     elif hotkey_matches("rectangle", modifiers):
                         task = "rectangle"
@@ -1819,7 +1851,8 @@ class InfershotApp:
                 if kind == "monitor":
                     threading.Thread(target=capture_monitor, daemon=True).start()
                 else:
-                    selector = RectSelector(self.root, self.gallery.show)
+                    selector = RectSelector(self.root, self.gallery.show, self.gallery.clear_folder)
+                    self.selector = selector
                     selector.window.bind("<Destroy>",
                         lambda event: self.selector_closed(event) if event.widget == selector.window else None, add="+")
             except Exception:
@@ -1829,6 +1862,7 @@ class InfershotApp:
 
     def selector_closed(self, _event=None):
         self.selector_open = False
+        self.selector = None
 
     def quit(self):
         if self.hook:
