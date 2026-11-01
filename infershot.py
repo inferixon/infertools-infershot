@@ -162,6 +162,8 @@ kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
 kernel32.GlobalLock.restype = wintypes.LPVOID
 kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
 kernel32.GlobalUnlock.restype = wintypes.BOOL
+kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalFree.restype = wintypes.HGLOBAL
 
 try:
     user32.SetProcessDpiAwarenessContext.argtypes = [wintypes.HANDLE]
@@ -409,7 +411,10 @@ def save_capture(image):
     else:
         image.save(path, "JPEG", quality=CONFIG["quality"], optimize=True)
     if CONFIG["copy_to_clipboard"]:
-        copy_image_to_clipboard(image)
+        try:
+            copy_image_to_clipboard(image)
+        except OSError as error:
+            log(f"capture saved; clipboard unavailable: {error!r}")
     log(f"saved {path}")
     if CAPTURE_CALLBACK is not None:
         CAPTURE_CALLBACK(image.copy(), path)
@@ -422,27 +427,31 @@ def copy_image_to_clipboard(image):
     data = output.getvalue()[14:]
     handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
     if not handle:
-        log("clipboard failed: GlobalAlloc")
-        return
-
-    pointer = kernel32.GlobalLock(handle)
-    if not pointer:
-        log("clipboard failed: GlobalLock")
-        return
-    ctypes.memmove(pointer, data, len(data))
-    kernel32.GlobalUnlock(handle)
-
-    if not user32.OpenClipboard(None):
-        log("clipboard failed: OpenClipboard")
-        return
+        raise ctypes.WinError(ctypes.get_last_error())
     try:
-        user32.EmptyClipboard()
-        if not user32.SetClipboardData(CF_DIB, handle):
-            log("clipboard failed: SetClipboardData")
-            return
-        log("clipboard updated")
+        pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            ctypes.memmove(pointer, data, len(data))
+        finally:
+            kernel32.GlobalUnlock(handle)
+        for attempt in range(10):
+            if user32.OpenClipboard(None):
+                break
+            if attempt == 9:
+                raise ctypes.WinError(ctypes.get_last_error())
+            time.sleep(.02)
+        try:
+            if not user32.EmptyClipboard() or not user32.SetClipboardData(CF_DIB, handle):
+                raise ctypes.WinError(ctypes.get_last_error())
+            handle = None  # Windows owns the transferred memory.
+            log("clipboard updated")
+        finally:
+            user32.CloseClipboard()
     finally:
-        user32.CloseClipboard()
+        if handle:
+            kernel32.GlobalFree(handle)
 
 
 def capture_monitor():
@@ -886,12 +895,22 @@ class RectSelector:
             return
 
         left, top, right, bottom = rect
-        tools = (self.TOOLBAR_TOOLS + tuple(("width", width) for width in CONFIG["stroke"]["choices"])
-                 + tuple(("color", index) for index in range(len(CONFIG["colors"]))))
-        columns = min(len(tools), max(1, (self.width - 2 * self.TOOLBAR_MARGIN + self.TOOLBAR_GAP) // (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)))
-        rows = math.ceil(len(tools) / columns)
-        width = columns * self.TOOLBAR_BUTTON + (columns - 1) * self.TOOLBAR_GAP
-        height = rows * self.TOOLBAR_BUTTON + (rows - 1) * self.TOOLBAR_GAP
+        action_index = self.TOOLBAR_TOOLS.index("undo")
+        tools = (self.TOOLBAR_TOOLS[:action_index]
+                 + tuple(("color", index) for index in range(len(CONFIG["colors"])))
+                 + tuple(("width", width) for width in CONFIG["stroke"]["choices"])
+                 + self.TOOLBAR_TOOLS[action_index:])
+        positions = []
+        cursor, row = 0, 0
+        available = max(self.TOOLBAR_BUTTON, self.width - 2 * self.TOOLBAR_MARGIN)
+        for tool in tools:
+            gap = (24 if tool == "undo" else self.TOOLBAR_GAP) if cursor else 0
+            if cursor + gap + self.TOOLBAR_BUTTON > available:
+                cursor, row, gap = 0, row + self.TOOLBAR_BUTTON + self.TOOLBAR_GAP, 0
+            positions.append((cursor + gap, row))
+            cursor += gap + self.TOOLBAR_BUTTON
+        width = max(px for px, _py in positions) + self.TOOLBAR_BUTTON
+        height = max(py for _px, py in positions) + self.TOOLBAR_BUTTON
         x = max(0, min(self.width - width, left))
         if top >= height + self.TOOLBAR_MARGIN:
             y = top - height - self.TOOLBAR_MARGIN
@@ -901,8 +920,8 @@ class RectSelector:
             y = max(0, min(self.height - height, top + self.TOOLBAR_MARGIN))
 
         for index, tool in enumerate(tools):
-            bx1 = x + (index % columns) * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
-            by1 = y + (index // columns) * (self.TOOLBAR_BUTTON + self.TOOLBAR_GAP)
+            bx1 = x + positions[index][0]
+            by1 = y + positions[index][1]
             bx2 = bx1 + self.TOOLBAR_BUTTON
             by2 = by1 + self.TOOLBAR_BUTTON
             if isinstance(tool, tuple):

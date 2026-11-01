@@ -1,15 +1,108 @@
 """Session-local screenshot gallery and native-resolution clipboard sheets."""
 
 import io
+import math
 from pathlib import Path
 import tkinter as tk
+from tkinter import filedialog
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
-from qa_core import sheet_layout
+from qa_core import sheet_layout, write_capture_archive
 
 
 BG, PANEL, TEXT, MUTED = "#171a21", "#222630", "#eef2f7", "#9ca8b8"
+
+
+def icon_image(name, size, glow=False):
+    """Scope-style icon geometry; no font glyph or platform theme dependency."""
+    scale = size * 4 / 24
+    image = Image.new("RGBA", (size * 4, size * 4))
+    draw = ImageDraw.Draw(image)
+    def line(points):
+        draw.line([(round(x * scale), round(y * scale)) for x, y in points],
+                  fill=TEXT, width=max(1, round(1.8 * scale)), joint="curve")
+    if name in {"copy", "copied"}:
+        draw.rectangle(tuple(round(v * scale) for v in (8, 8, 20, 21)), outline=TEXT, width=round(1.8 * scale))
+        line(((16, 8), (16, 3), (3, 3), (3, 16), (8, 16)))
+        if name == "copied":
+            line(((11, 14), (14, 17), (18, 12)))
+    elif name == "archive":
+        line(((12, 3), (12, 15)))
+        line(((7, 10), (12, 15), (17, 10)))
+        line(((4, 16), (4, 21), (20, 21), (20, 16)))
+    elif name == "clear":
+        draw.arc(tuple(round(v * scale) for v in (3, 3, 21, 21)), 200, 510,
+                 fill=TEXT, width=round(1.8 * scale))
+        line(((3, 3), (3, 10), (10, 10)))
+    else:
+        line(((5, 5), (19, 19)))
+        line(((19, 5), (5, 19)))
+    image = image.resize((size, size), Image.Resampling.LANCZOS)
+    if glow:
+        halo = Image.new("RGBA", image.size, "white")
+        halo.putalpha(image.getchannel("A").filter(ImageFilter.GaussianBlur(1.6)).point(lambda alpha: round(alpha * .65)))
+        image = Image.alpha_composite(halo, image)
+    return image
+
+
+class IconButton(tk.Canvas):
+    def __init__(self, parent, icon, title, command, size=28):
+        super().__init__(parent, width=size, height=size, background=parent.cget("background"),
+                         highlightthickness=0, borderwidth=0, cursor="hand2", takefocus=True)
+        self.icon, self.title, self.command, self.size = icon, title, command, size
+        self.hovered, self.focused, self.tooltip, self.tip_timer = False, False, None, None
+        self.bind("<ButtonRelease-1>", lambda _event: self.invoke())
+        self.bind("<Return>", lambda _event: self.invoke())
+        self.bind("<space>", lambda _event: self.invoke())
+        self.bind("<Enter>", self.enter)
+        self.bind("<Leave>", self.leave)
+        self.bind("<Unmap>", self.leave)
+        self.bind("<FocusIn>", lambda _event: self.focus(True))
+        self.bind("<FocusOut>", lambda _event: self.focus(False))
+        self.paint()
+
+    def paint(self):
+        self.delete("all")
+        self.photo = ImageTk.PhotoImage(icon_image(self.icon, self.size - 6, self.hovered), master=self)
+        self.create_image(self.size / 2, self.size / 2, image=self.photo)
+        if self.focused:
+            self.create_rectangle(1, 1, self.size - 2, self.size - 2, outline="#9cbad4")
+
+    def invoke(self):
+        self.leave()
+        self.command()
+        return "break"
+
+    def focus(self, value):
+        self.focused = value
+        self.paint()
+
+    def enter(self, _event=None):
+        self.hovered = True
+        self.paint()
+        self.tip_timer = self.after(450, self.show_tip)
+
+    def show_tip(self):
+        self.tip_timer = None
+        self.tooltip = tk.Toplevel(self)
+        self.tooltip.overrideredirect(True)
+        self.tooltip.transient(self.winfo_toplevel())
+        self.tooltip.attributes("-topmost", True)
+        tk.Label(self.tooltip, text=self.title, background=PANEL, foreground=TEXT,
+                 font=("Palatino Linotype", 10), padx=6, pady=3).pack()
+        self.tooltip.geometry(f"+{self.winfo_rootx()}+{self.winfo_rooty() + self.size + 4}")
+
+    def leave(self, _event=None):
+        if self.tip_timer is not None:
+            self.after_cancel(self.tip_timer)
+            self.tip_timer = None
+        if self.tooltip is not None:
+            self.tooltip.destroy()
+            self.tooltip = None
+        self.hovered = False
+        if self.winfo_exists():
+            self.paint()
 
 
 class CaptureGallery:
@@ -42,74 +135,115 @@ class CaptureGallery:
         self.on_close = on_close
         if self.window is None or not self.window.winfo_exists():
             self.window = tk.Toplevel(self.root, background=BG)
+            self.window.withdraw()
             self.window.title("Infershot – recent screenshots")
-            self.window.geometry("780x390")
-            self.window.minsize(420, 260)
+            self.window.resizable(False, False)
             self.window.protocol("WM_DELETE_WINDOW", self.hide)
             self.window.bind("<Escape>", lambda _event: self.hide())
             self.window.bind("<Control-g>", lambda _event: self.hide())
             self.actions = tk.Frame(self.window, background=BG)
-            self.actions.pack(fill="x", padx=14, pady=10)
-            self.button(self.actions, "Copy sheet", self.copy_sheet).pack(side="left", padx=(0, 16))
-            self.button(self.actions, "Clear history", self.clear).pack(side="left")
-            self.status = tk.Label(self.actions, background=BG, foreground=MUTED,
-                                   font=("Palatino Linotype", 11), anchor="e")
-            self.status.pack(side="right", expand=True, fill="x")
-            self.canvas = tk.Canvas(self.window, background=BG, highlightthickness=0)
-            scrollbar = tk.Scrollbar(self.window, orient="horizontal", command=self.canvas.xview)
-            self.canvas.configure(xscrollcommand=scrollbar.set)
-            scrollbar.pack(side="bottom", fill="x")
-            self.canvas.pack(fill="both", expand=True, padx=14, pady=(0, 10))
-            self.cards = tk.Frame(self.canvas, background=BG)
-            self.canvas.create_window((0, 0), window=self.cards, anchor="nw")
-            self.cards.bind("<Configure>", lambda _event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+            self.actions.pack(side="bottom", anchor="e", padx=8, pady=(0, 6))
+            self.action_buttons = []
+            for icon, title, action in (("copy", "Copy sheet", self.copy_sheet),
+                                         ("archive", "Save ZIP archive", self.export_archive),
+                                         ("clear", "Clear history", self.clear)):
+                button = IconButton(self.actions, icon, title, action)
+                button.pack(side="left", padx=3)
+                self.action_buttons.append(button)
+            self.status = tk.StringVar(master=self.window)
+            self.cards = tk.Frame(self.window, background=BG)
+            self.cards.pack(padx=8, pady=8)
         self.refresh()
         self.window.deiconify()
         self.window.lift()
         self.window.focus_force()
 
-    @staticmethod
-    def button(parent, text, action):
-        return tk.Button(parent, text=text, command=action, background=BG,
-                         foreground=TEXT, activebackground=BG, activeforeground=TEXT,
-                         relief="flat", borderwidth=0, cursor="hand2",
-                         font=("Palatino Linotype", 11), takefocus=True)
-
     def refresh(self):
         for widget in self.cards.winfo_children():
             widget.destroy()
         self.photos = []
+        available_w = max(200, self.window.winfo_screenwidth() - 80)
+        available_h = max(180, self.window.winfo_screenheight() - 120)
+        tile = 112
+        count = max(1, len(self.items))
+        while True:
+            columns = max(1, min(count, 6, int(available_w // (tile + 8))))
+            rows = math.ceil(count / columns)
+            if rows * (tile + 8) + 50 <= available_h or tile <= 48:
+                break
+            tile -= 8
         if not self.items:
             tk.Label(self.cards, text="Capture a region or monitor to add a screenshot.",
-                     background=BG, foreground=TEXT, font=("Palatino Linotype", 12)).pack(padx=20, pady=60)
-        for item in self.items:
-            card = tk.Frame(self.cards, background=PANEL, padx=10, pady=10)
-            card.pack(side="left", padx=(0, 12), anchor="n")
+                     background=BG, foreground=MUTED, font=("Palatino Linotype", 11)).pack(padx=8, pady=20)
+        self.card_controls = []
+        for index, item in enumerate(self.items):
+            card = tk.Frame(self.cards, background=BG, width=tile, height=tile,
+                            highlightthickness=1, highlightbackground="#9cbad4" if item["selected"] else "#505967",
+                            takefocus=True)
+            card.grid(row=index // columns, column=index % columns, padx=4, pady=4)
+            card.pack_propagate(False)
             with Image.open(io.BytesIO(item["data"])) as image:
                 preview = image.copy()
-            preview.thumbnail((210, 150))
+            preview.thumbnail((tile - 4, tile - 4))
             photo = ImageTk.PhotoImage(preview, master=self.window)
             self.photos.append(photo)
-            tk.Label(card, image=photo, background=PANEL, width=210, height=150).pack()
-            selected = tk.BooleanVar(master=self.window, value=item["selected"])
-            def toggle(entry=item, variable=selected):
-                entry["selected"] = variable.get()
+            picture = tk.Label(card, image=photo, background=BG)
+            picture.pack(fill="both", expand=True)
+            def toggle(_event=None, entry=item, frame=card):
+                entry["selected"] = not entry["selected"]
+                frame.configure(highlightbackground="#9cbad4" if entry["selected"] else "#505967")
                 self.update_status()
-            tk.Checkbutton(card, text=item["path"].name, variable=selected, command=toggle,
-                           background=PANEL, foreground=TEXT, activebackground=PANEL,
-                           activeforeground=TEXT, selectcolor=BG, font=("Palatino Linotype", 11)).pack(anchor="w")
-            tk.Label(card, text=f'{item["size"][0]} × {item["size"][1]}', background=PANEL,
-                     foreground=MUTED, font=("Palatino Linotype", 10)).pack(anchor="w")
-            row = tk.Frame(card, background=PANEL)
-            row.pack(fill="x", pady=(6, 0))
-            self.button(row, "Copy image", lambda entry=item: self.copy_one(entry)).pack(side="left")
-            self.button(row, "Remove", lambda entry=item: self.remove(entry)).pack(side="right")
+            picture.bind("<ButtonRelease-1>", toggle)
+            card.bind("<space>", toggle)
+            controls = (IconButton(card, "copy", f'Copy {item["path"].name} – {item["size"][0]} × {item["size"][1]}',
+                                   lambda entry=item: self.copy_one(entry), size=22),
+                        IconButton(card, "remove", "Remove from history", lambda entry=item: self.remove(entry), size=22))
+            self.card_controls.append(controls)
+            def reveal(_event=None, buttons=controls):
+                buttons[0].place(relx=1, x=-48, y=2)
+                buttons[1].place(relx=1, x=-24, y=2)
+            def conceal(_event=None, frame=card, buttons=controls):
+                if not frame.winfo_exists():
+                    return
+                x, y = frame.winfo_pointerxy()
+                focus = self.window.focus_get()
+                focused = focus is not None and str(focus).startswith(str(frame))
+                inside = frame.winfo_rootx() <= x < frame.winfo_rootx() + tile and frame.winfo_rooty() <= y < frame.winfo_rooty() + tile
+                if not inside and not focused:
+                    for button in buttons:
+                        button.place_forget()
+            for widget in (card, picture, *controls):
+                widget.bind("<Enter>", reveal, add="+")
+                widget.bind("<Leave>", lambda event, action=conceal: self.window.after(30, action), add="+")
+                widget.bind("<FocusIn>", reveal, add="+")
+                widget.bind("<FocusOut>", lambda event, action=conceal: self.window.after_idle(action), add="+")
         self.update_status()
+        self.window.update_idletasks()
+        self.window.geometry(f"{self.window.winfo_reqwidth()}x{self.window.winfo_reqheight()}")
 
     def update_status(self, message=None):
         if self.status is not None:
             count = sum(item["selected"] for item in self.items)
-            self.status.configure(text=message or f"{count} selected / {len(self.items)} captures")
+            self.status.set(message or f"{count} selected / {len(self.items)} captures")
+            self.window.title("Infershot – " + self.status.get())
+
+    def export_archive(self, destination=None):
+        selected = [item for item in self.items if item["selected"]]
+        if not selected:
+            self.update_status("Choose at least one screenshot")
+            return
+        if destination is None:
+            folder = selected[-1]["path"].parent
+            destination = filedialog.asksaveasfilename(parent=self.window, title="Save screenshot archive",
+                initialdir=str(folder) if folder.exists() else None, initialfile="infershot-captures.zip",
+                defaultextension=".zip", filetypes=(("ZIP archive", "*.zip"),))
+        if not destination:
+            return
+        try:
+            names = write_capture_archive(destination, selected)
+            self.update_status(f"Saved archive – {len(names)} screenshots")
+        except Exception as error:
+            self.update_status(f"Archive failed: {error}")
 
     def copy_one(self, item):
         try:
@@ -137,7 +271,10 @@ class CaptureGallery:
     def remove(self, item):
         self.items.remove(item)
         self.refresh()
+        if not self.items:
+            self.hide()
 
     def clear(self):
         self.items.clear()
         self.refresh()
+        self.hide()

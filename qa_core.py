@@ -2,6 +2,10 @@
 
 import copy
 import math
+import os
+from pathlib import Path
+import tempfile
+import zipfile
 
 
 class AnnotationHistory:
@@ -71,3 +75,27 @@ def repair_polygons(center, size):
     cx, cy = center
     return [[(cx + (x - 12) * size / 24, cy + (y - 12) * size / 24)
              for x, y in polygon] for polygon in REPAIR_POLYGONS]
+
+
+def write_capture_archive(destination, items):
+    """Atomically export immutable PNG snapshots with unique, flat names."""
+    if not items:
+        raise ValueError("Choose at least one screenshot")
+    destination = Path(destination)
+    descriptor, temporary = tempfile.mkstemp(prefix="infershot-", suffix=".zip", dir=destination.parent)
+    os.close(descriptor)
+    names = []
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as archive:
+            for item in items:
+                stem = Path(item["path"]).stem or "capture"
+                name, serial = stem + ".png", 2
+                while name.casefold() in {entry.casefold() for entry in names}:
+                    name = f"{stem}-{serial}.png"
+                    serial += 1
+                archive.writestr(name, item["data"])
+                names.append(name)
+        os.replace(temporary, destination)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return names

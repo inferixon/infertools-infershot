@@ -17,7 +17,7 @@ and adds colored annotations before saving a selected region.
 - DPI-matched text preview with a live keyboard layout and Caps Lock indicator
 - Drag or two-click line, arrow, double-arrow, and rectangle annotations
 - Per-annotation stroke width and scalable repair stamps
-- Recent screenshot gallery with individual copy and full-resolution Copy sheet
+- Recent screenshot gallery with individual copy, PNG ZIP archives, and full-resolution Copy sheet
 - Automatic numbered filenames
 - Optional clipboard copy
 - Configurable capture, annotation, save, and cancel hotkeys
@@ -108,15 +108,15 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
   frame as needed. A compact status shows the active `EN`, `NO`, or `UA` layout
   and Caps Lock state. `Enter` starts a new line, `Ctrl+Enter` commits the text,
   and `Escape` cancels the active text editor.
-- Undo/Redo – step through annotation actions, including clearing with Eraser.
+- Color circles – select the color for subsequent annotations. They follow Text
+  in the order listed in `colors`; the count matches that list.
+- Stroke widths – select a configured width for subsequent shapes and freehand
+  marks. Existing annotations and text sizes stay unchanged.
+- Undo/Redo – after a wider gap, step through annotation actions, including clearing with Eraser.
 - Eraser – clear every completed or pending annotation without closing or changing
   the capture selection.
 - Gallery – view recent captures; closing the gallery resumes the unfinished
   selection with its annotations intact.
-- Stroke widths – select a configured width for subsequent shapes and freehand
-  marks. Existing annotations and text sizes stay unchanged.
-- Color circles – select the color for subsequent annotations. They follow the
-  tool buttons in the order listed in `colors`; the count matches that list.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
@@ -127,10 +127,14 @@ The toolbar stays anchored to the selection and cannot be dragged independently.
 
 ## Recent screenshots
 
-The gallery opens after a capture by default. Copy one image, select screenshots
-for Copy sheet, or remove items from history. Sheets preserve each image's native
-resolution and order, with 24 px gutters. Clear history and Remove never delete
-saved files. Captures are immutable in-memory copies limited to the most recent
+The gallery opens after a capture by default. Its square thumbnails have hover
+icons for Copy and Remove; click a thumbnail to include/exclude it. The three
+adjacent action icons are Copy sheet, Save ZIP archive, and Clear history, with
+hover tooltips and keyboard focus. The window sizes to its content and wraps
+thumbnails as needed; it has no scrollbars or text action buttons. PNG archives
+export selected immutable snapshots with unique filenames. Sheets preserve each
+image's native resolution and order, with 24 px gutters. Clear history and Remove
+never delete saved files. Captures are immutable in-memory copies limited to the most recent
 `gallery.limit` images; they are cleared when Infershot exits. Original files stay
 in the configured screenshot folder. Set `gallery.show_after_capture` to `false`
 to keep the immediate-save workflow; open the gallery from the selection toolbar

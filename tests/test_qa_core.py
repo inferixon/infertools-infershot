@@ -1,9 +1,11 @@
 import sys
 from pathlib import Path
 import unittest
+import tempfile
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from qa_core import AnnotationHistory, repair_polygons, sheet_layout
+from qa_core import AnnotationHistory, repair_polygons, sheet_layout, write_capture_archive
 
 
 class HistoryTests(unittest.TestCase):
@@ -47,3 +49,25 @@ class SheetTests(unittest.TestCase):
             for (x, y), (sx, sy) in zip(polygon, scaled):
                 self.assertAlmostEqual(sx - 100, (x - 100) * 2)
                 self.assertAlmostEqual(sy - 200, (y - 200) * 2)
+
+
+class ArchiveTests(unittest.TestCase):
+    def test_snapshot_bytes_and_unique_flat_png_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "captures.zip"
+            items = [{"path": Path("first") / "capture.jpg", "data": b"first snapshot"},
+                     {"path": Path("second") / "CAPTURE.jpg", "data": b"second snapshot"}]
+            names = write_capture_archive(path, items)
+            self.assertEqual(len({name.casefold() for name in names}), 2)
+            with zipfile.ZipFile(path) as archive:
+                self.assertEqual(archive.namelist(), names)
+                self.assertEqual([archive.read(name) for name in names], [item["data"] for item in items])
+                self.assertTrue(all(name.endswith(".png") and "/" not in name and "\\" not in name for name in names))
+
+    def test_empty_export_preserves_an_existing_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "captures.zip"
+            path.write_bytes(b"existing archive")
+            with self.assertRaises(ValueError):
+                write_capture_archive(path, [])
+            self.assertEqual(path.read_bytes(), b"existing archive")
