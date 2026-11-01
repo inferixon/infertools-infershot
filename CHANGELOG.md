@@ -3,6 +3,7 @@
 ## 1.5
 
 - Added Screenshot manager
+- Added screenshot selection, Copy sheet, ZIP export, and screenshot folder clearing.
 
 ## 1.4
 
