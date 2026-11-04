@@ -116,6 +116,22 @@ class ScreenshotFolderTests(unittest.TestCase):
             self.assertFalse(sheet.exists())
             self.assertEqual((batch / sheet.name).read_bytes(), b"sheet")
 
+    def test_single_image_delete_is_scoped_and_preserves_other_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / "screens"
+            folder.mkdir()
+            target, other = folder / "photo.png", folder / "ScreenShot-001.jpg"
+            outside = root / "outside.png"
+            for path in (target, other, outside):
+                path.write_bytes(path.name.encode())
+            with self.assertRaises(ValueError):
+                clear_screenshot_folder(folder, root / "trash", [outside], captures_only=False)
+            batch = clear_screenshot_folder(folder, root / "trash", [target], captures_only=False)
+            self.assertFalse(target.exists())
+            self.assertEqual((batch / target.name).read_bytes(), b"photo.png")
+            self.assertTrue(other.exists() and outside.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

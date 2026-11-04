@@ -332,7 +332,7 @@ class CaptureGallery:
             card.bind("<space>", toggle)
             controls = (IconButton(card, "copy", f'Copy {item["path"].name} – {item["size"][0]} × {item["size"][1]}',
                                    lambda entry=item: self.copy_one(entry), size=22),
-                        IconButton(card, "remove", "Remove from history", lambda entry=item: self.remove(entry), size=22))
+                        IconButton(card, "remove", "Delete screenshot file", lambda entry=item: self.remove(entry), size=22))
             self.card_controls.append(controls)
             def reveal(_event=None, buttons=controls):
                 buttons[0].place(relx=1, x=-48, y=2)
@@ -425,7 +425,19 @@ class CaptureGallery:
             self.update_status(str(error))
 
     def remove(self, item):
-        self.items.remove(item)
+        if item not in self.items:
+            return
+        folder = self.settings()["save_path"] if self.settings else item["path"].parent
+        recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
+        try:
+            clear_screenshot_folder(folder, recovery, [item["path"]], captures_only=False)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Delete screenshot file", str(error), parent=self.window)
+            return
+        if self.settings:
+            self.sync_folder()
+        else:
+            self.items.remove(item)
         self.refresh()
         if not self.items:
             self.hide()

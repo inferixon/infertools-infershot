@@ -29,10 +29,10 @@ def screenshot_files(folder, captures_only=False):
     return [path for _, _, path in sorted(entries, reverse=True)]
 
 
-def clear_screenshot_folder(folder, recovery_root, files):
+def clear_screenshot_folder(folder, recovery_root, files, captures_only=True):
     """Move only the confirmed direct files into a unique recoverable batch."""
     folder = Path(folder).resolve()
-    allowed = {path.resolve() for path in screenshot_files(folder, captures_only=True)}
+    allowed = {path.resolve() for path in screenshot_files(folder, captures_only=captures_only)}
     confirmed = []
     for original in files:
         path = Path(original)
