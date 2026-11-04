@@ -19,7 +19,8 @@ def screenshot_files(folder, captures_only=False):
     entries = []
     for path in folder.iterdir():
         try:
-            matches = (fnmatch.fnmatchcase(path.name.casefold(), "screenshot-*.*") if captures_only else
+            matches = (any(fnmatch.fnmatchcase(path.name.casefold(), pattern)
+                           for pattern in ("screenshot-*.*", "screensheet-*.*")) if captures_only else
                        path.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".webp"})
             if not path.is_symlink() and path.is_file() and matches:
                 entries.append((path.stat().st_mtime_ns, path.name.casefold(), path))

@@ -118,7 +118,7 @@ fill, wider spacing, and a subtle white hover glow. The tools appear in this ord
 - Screenshot manager – view saved captures; closing the manager resumes the unfinished
   selection with its annotations intact.
 - Clear folder – move screenshot image files to the Infershot recovery folder
-  immediately. Only `ScreenShot-*.*` files are cleared.
+  immediately. `ScreenShot-*.*` and `ScreenSheet-*.*` files are cleared.
 
 `Ctrl+Z` removes the latest completed annotation. If Eraser cleared the canvas,
 `Ctrl+Z` restores the annotations it removed. The undo buffer keeps the latest
@@ -146,7 +146,8 @@ Copy sheet also saves `ScreenSheet-001`, `ScreenSheet-002`, etc. in `save_path`,
 using the configured image format and quality, with separate screenshot numbering.
 Remove hides an item until reopening reloads files from the folder. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
-action, also available in the manager, moves all direct `ScreenShot-*.*` files to a unique batch under
+action, also available in the manager, moves all direct `ScreenShot-*.*` and
+`ScreenSheet-*.*` files to a unique batch under
 `%LOCALAPPDATA%\Infershot\Trash`; `restore.json` records their original folder.
 Move those files back to restore them. It does not recurse into subfolders.
 Thumbnails use 336 px tiles (3× the original size), with page arrows when needed

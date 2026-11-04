@@ -235,7 +235,7 @@ class CaptureGallery:
             self.action_buttons = []
             for icon, title, action in (("copy", "Copy sheet", self.copy_sheet),
                                          ("archive", "Save ZIP archive", self.export_archive),
-                                         ("trash", "Clear screenshot folder – ScreenShot-*.*", self.clear_folder)):
+                                         ("trash", "Clear screenshot folder – ScreenShot-*.* / ScreenSheet-*.*", self.clear_folder)):
                 button = IconButton(self.actions, icon, title, action)
                 button.pack(side="left", padx=3)
                 self.action_buttons.append(button)

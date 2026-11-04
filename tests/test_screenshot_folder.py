@@ -96,14 +96,25 @@ class ScreenshotFolderTests(unittest.TestCase):
     def test_clear_pattern_includes_all_extensions_and_preserves_other_images(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for name in ("ScreenShot-001.jpg", "screenshot-002.custom", "photo.png"):
+            for name in ("ScreenShot-001.jpg", "screenshot-002.custom", "ScreenSheet-001.jpg", "SCREENSHEET-002.PNG", "photo.png"):
                 (root / name).write_bytes(b"keep")
             files = screenshot_files(root, captures_only=True)
-            self.assertEqual({path.name for path in files}, {"ScreenShot-001.jpg", "screenshot-002.custom"})
+            self.assertEqual({path.name for path in files}, {"ScreenShot-001.jpg", "screenshot-002.custom", "ScreenSheet-001.jpg", "SCREENSHEET-002.PNG"})
             with self.assertRaises(ValueError):
                 clear_screenshot_folder(root, root / "trash", [root / "photo.png"])
             clear_screenshot_folder(root, root / "trash", files)
             self.assertTrue((root / "photo.png").exists())
+
+    def test_sheet_only_folder_is_clearable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sheet = root / "ScreenSheet-001.png"
+            sheet.write_bytes(b"sheet")
+            files = screenshot_files(root, captures_only=True)
+            self.assertEqual(files, [sheet])
+            batch = clear_screenshot_folder(root, root / "trash", files)
+            self.assertFalse(sheet.exists())
+            self.assertEqual((batch / sheet.name).read_bytes(), b"sheet")
 
 
 if __name__ == "__main__":
