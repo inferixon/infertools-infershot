@@ -40,6 +40,10 @@ def icon_image(name, size, glow=False, color=ICON_BLUE):
         else:
             line(((12, 5), (12, 19)))
             line(((3, 12), (21, 12)))
+    elif name in {"select_all", "select_none"}:
+        line(((4, 4), (20, 4), (20, 20), (4, 20), (4, 4)))
+        if name == "select_all":
+            line(((7, 12), (10, 15), (17, 8)))
     elif name == "clear":
         draw.arc(tuple(round(v * scale) for v in (3, 3, 21, 21)), 200, 510,
                  fill=255, width=round(1.8 * scale))
@@ -176,7 +180,7 @@ class CaptureGallery:
                     buffer = io.BytesIO()
                     image.convert("RGB").save(buffer, "PNG")
                     self.items.append({"path": path, "data": buffer.getvalue(),
-                                       "size": image.size, "selected": previous.get(path, True)})
+                                       "size": image.size, "selected": previous.get(path, False)})
             except (OSError, ValueError, Image.DecompressionBombError):
                 continue
             if len(self.items) >= settings["gallery"]["limit"]:
@@ -204,9 +208,9 @@ class CaptureGallery:
     def add(self, image, path, limit=20):
         buffer = io.BytesIO()
         image.convert("RGB").save(buffer, "PNG")
-        self.items.append({"path": Path(path), "data": buffer.getvalue(),
-                           "size": image.size, "selected": True})
-        del self.items[:-limit]
+        self.items.insert(0, {"path": Path(path), "data": buffer.getvalue(),
+                              "size": image.size, "selected": False})
+        del self.items[limit:]
         if self.window is not None:
             self.refresh()
 
@@ -266,6 +270,8 @@ class CaptureGallery:
                                     lambda kind=kind: self.toggle_filter(kind))
                 button.pack(side="left", padx=padding)
                 self.filter_buttons[kind] = button
+            self.selection_button = IconButton(self.actions, "select_none", "Select all", self.toggle_selection)
+            self.selection_button.pack(side="left", padx=(9, 3))
             self.pagination = tk.Frame(self.window, background=BG)
             self.previous_button = IconButton(self.pagination, "previous", "Previous screenshots", lambda: self.change_page(-1))
             self.previous_button.pack(side="left", padx=3)
@@ -425,10 +431,23 @@ class CaptureGallery:
         self.page = max(0, self.page + delta)
         self.refresh()
 
+    def toggle_selection(self):
+        visible = self.visible_items()
+        selected = not all(item["selected"] for item in visible)
+        for item in visible:
+            item["selected"] = selected
+        self.set_sheet_copied()
+        self.refresh()
+
     def update_status(self, message=None):
         if self.status is not None:
             visible = self.visible_items()
             count = sum(item["selected"] for item in visible)
+            all_selected = bool(visible) and count == len(visible)
+            self.selection_button.checked = all_selected
+            self.selection_button.icon = "select_all" if all_selected else "select_none"
+            self.selection_button.title = "Clear selection" if all_selected else "Select all"
+            self.selection_button.set_enabled(bool(visible))
             self.status.set(message or f"{count} selected / {len(visible)} captures")
             self.window.title("Infershot – screenshot manager – " + self.status.get())
 

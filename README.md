@@ -147,6 +147,9 @@ using the configured image format and quality, with separate screenshot numberin
 Use the two filter icons to show screenshots and sheets independently. Both
 start enabled. The app saves each switch in `config.json`. Copy sheet and ZIP
 export use selected images that match the filters.
+Images are ordered by file modification date, newest first, from left to right
+and top to bottom. New images start unselected. Use the checkbox icon to select
+all images matching the filters across every page, or clear that selection.
 The thumbnail close icon immediately moves that image file to the Infershot
 recovery folder; it stays deleted when the manager is reopened. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
