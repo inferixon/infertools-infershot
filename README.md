@@ -137,8 +137,8 @@ The borderless window closes with `Esc` or the corner close icon shown on hover.
 Drag its empty top strip to move the manager.
 Its square thumbnails have hover
 icons for Copy and Remove; click a thumbnail to include/exclude it. The three
-adjacent action icons are Copy sheet, Save ZIP archive, and Clear screenshot folder, with
-hover tooltips and keyboard focus. The window sizes to its content and wraps
+action icons follow Select all, Show screenshots, and Show sheets, with a gap
+before Copy sheet, Save ZIP archive, and Trash. The window sizes to its content and wraps
 thumbnails as needed; it has no scrollbars or text action buttons. PNG archives
 export selected immutable snapshots with unique filenames. Sheets preserve each
 image's native resolution and order, with 24 px gutters.
@@ -153,8 +153,11 @@ all images matching the filters across every page, or clear that selection.
 The thumbnail close icon immediately moves that image file to the Infershot
 recovery folder; it stays deleted when the manager is reopened. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
-action, also available in the manager, moves all direct `ScreenShot-*.*` and
-`ScreenSheet-*.*` files to a unique batch under
+action moves all direct `ScreenShot-*.*` and `ScreenSheet-*.*` files to recovery.
+In the manager, Trash moves only the selected images if the selection is partial.
+With none or all selected, it moves all generated captures matching the active
+filters, including older files beyond the gallery limit, plus any selected images.
+Both actions use a unique batch under
 `%LOCALAPPDATA%\Infershot\Trash`; `restore.json` records their original folder.
 Move those files back to restore them. It does not recurse into subfolders.
 Thumbnails use 336 px tiles (3× the original size), with page arrows when needed

@@ -186,23 +186,28 @@ class CaptureGallery:
             if len(self.items) >= settings["gallery"]["limit"]:
                 break
 
-    def clear_folder(self, parent=None):
+    def clear_folder(self, parent=None, *, respect_selection=False):
         if self.settings is None:
             return
+        folder = self.settings()["save_path"]
+        recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
         try:
-            files = screenshot_files(self.settings()["save_path"], captures_only=True)
+            if respect_selection:
+                files, _partial = self.manager_delete_targets(self.visible_items())
+            else:
+                files = screenshot_files(folder, captures_only=True)
             if not files:
                 return
-            folder = self.settings()["save_path"]
-            recovery = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Infershot" / "Trash"
-            clear_screenshot_folder(folder, recovery, files)
-            self.sync_folder()
-            if self.window is not None:
-                self.refresh()
-                if not self.items:
-                    self.hide()
+            try:
+                clear_screenshot_folder(folder, recovery, files, captures_only=not respect_selection)
+            finally:
+                self.sync_folder()
+                if self.window is not None:
+                    self.refresh()
+                    if not self.items:
+                        self.hide()
         except (OSError, ValueError) as error:
-            messagebox.showerror("Clear screenshot folder", f"{error}\nRecovery folder: {recovery if 'recovery' in locals() else 'unchanged'}",
+            messagebox.showerror("Clear screenshot folder", f"{error}\nRecovery folder: {recovery}",
                                  parent=parent or self.window or self.root)
 
     def add(self, image, path, limit=20):
@@ -257,21 +262,21 @@ class CaptureGallery:
             self.window.bind("<Leave>", lambda _event: self.window.after_idle(self.hide_close), add="+")
             self.actions = tk.Frame(self.window, background=BG)
             self.actions.pack(side="bottom", anchor="e", padx=8, pady=(0, 6))
+            self.selection_button = IconButton(self.actions, "select_none", "Select all", self.toggle_selection)
+            self.selection_button.pack(side="left", padx=3)
+            self.filter_buttons = {}
+            for kind in ("screenshots", "sheets"):
+                button = IconButton(self.actions, kind, f"Show {kind}",
+                                    lambda kind=kind: self.toggle_filter(kind))
+                button.pack(side="left", padx=3)
+                self.filter_buttons[kind] = button
             self.action_buttons = []
             for icon, title, action in (("copy", "Copy sheet", self.copy_sheet),
                                          ("archive", "Save ZIP archive", self.export_archive),
-                                         ("trash", "Clear screenshot folder – ScreenShot-*.* / ScreenSheet-*.*", self.clear_folder)):
+                                         ("trash", "Delete images", lambda: self.clear_folder(respect_selection=True))):
                 button = IconButton(self.actions, icon, title, action)
-                button.pack(side="left", padx=3)
+                button.pack(side="left", padx=(15, 3) if icon == "copy" else 3)
                 self.action_buttons.append(button)
-            self.filter_buttons = {}
-            for kind, padding in (("screenshots", (15, 3)), ("sheets", 3)):
-                button = IconButton(self.actions, kind, f"Show {kind}",
-                                    lambda kind=kind: self.toggle_filter(kind))
-                button.pack(side="left", padx=padding)
-                self.filter_buttons[kind] = button
-            self.selection_button = IconButton(self.actions, "select_none", "Select all", self.toggle_selection)
-            self.selection_button.pack(side="left", padx=(9, 3))
             self.pagination = tk.Frame(self.window, background=BG)
             self.previous_button = IconButton(self.pagination, "previous", "Previous screenshots", lambda: self.change_page(-1))
             self.previous_button.pack(side="left", padx=3)
@@ -311,10 +316,22 @@ class CaptureGallery:
                 and self.window.winfo_rooty() <= y < self.window.winfo_rooty() + self.window.winfo_height()):
             self.close_button.place_forget()
 
+    def matches_filters(self, path):
+        kind = "sheets" if path.name.casefold().startswith("screensheet-") else "screenshots"
+        return kind in self.shown_types
+
     def visible_items(self):
-        return [item for item in self.items
-                if ("sheets" if item["path"].name.casefold().startswith("screensheet-")
-                    else "screenshots") in self.shown_types]
+        return [item for item in self.items if self.matches_filters(item["path"])]
+
+    def manager_delete_targets(self, visible):
+        if not self.settings or not self.shown_types:
+            return [], False
+        selected = [item["path"] for item in visible if item["selected"]]
+        if 0 < len(selected) < len(visible):
+            return selected, True
+        generated = screenshot_files(self.settings()["save_path"], captures_only=True)
+        matching = [path for path in generated if self.matches_filters(path)]
+        return list(dict.fromkeys(matching + selected)), False
 
     def toggle_filter(self, kind):
         enabled = kind not in self.shown_types
@@ -359,8 +376,6 @@ class CaptureGallery:
         self.previous_button.set_enabled(self.page > 0)
         self.next_button.set_enabled(self.page + 1 < pages)
         self.tile_size = tile
-        if self.settings:
-            self.action_buttons[2].set_enabled(bool(screenshot_files(self.settings()["save_path"], captures_only=True)))
         for kind, button in self.filter_buttons.items():
             button.checked = kind in self.shown_types
             button.title = f"Show {kind} ({'on' if button.checked else 'off'})"
@@ -448,6 +463,13 @@ class CaptureGallery:
             self.selection_button.icon = "select_all" if all_selected else "select_none"
             self.selection_button.title = "Clear selection" if all_selected else "Select all"
             self.selection_button.set_enabled(bool(visible))
+            try:
+                targets, partial = self.manager_delete_targets(visible)
+            except OSError:
+                targets, partial = [], False
+            trash = self.action_buttons[2]
+            trash.title = "Delete selected images" if partial else "Delete all captures matching filters"
+            trash.set_enabled(bool(targets))
             self.status.set(message or f"{count} selected / {len(visible)} captures")
             self.window.title("Infershot – screenshot manager – " + self.status.get())
 
