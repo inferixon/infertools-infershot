@@ -6,7 +6,7 @@
   "copy_to_clipboard": true,
   "undo_limit": 20,
   "stroke": {"width": 5, "choices": [3, 5, 9]},
-  "gallery": {"limit": 20},
+  "gallery": {"limit": 20, "show_screenshots": true, "show_sheets": true},
   "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",

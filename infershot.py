@@ -2,10 +2,12 @@ import ctypes
 import io
 import json
 import math
+import msvcrt
 import os
 import queue
 import re
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -20,7 +22,7 @@ from PIL import ImageDraw, ImageEnhance, ImageFont, ImageGrab, ImageTk
 from runtime_state import (acquire_session_mutex, current_session_id,
                            remove_owned_pid, state_directory, write_pid)
 from qa_core import AnnotationHistory, repair_polygons, screenshot_files
-from capture_gallery import CaptureGallery
+from capture_gallery import CaptureGallery, ICON_BLUE, ICON_HOVER, ICON_DIM
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -34,7 +36,7 @@ DEFAULT_CONFIG = {
     "copy_to_clipboard": True,
     "undo_limit": 20,
     "stroke": {"width": 5, "choices": [3, 5, 9]},
-    "gallery": {"limit": 20},
+    "gallery": {"limit": 20, "show_screenshots": True, "show_sheets": True},
     "colors": ["#ff2020", "#22c55e"],
     "text": {
         "font_family": "Palatino Linotype",
@@ -193,7 +195,7 @@ def load_config():
     if not CONFIG_FILE.exists():
         CONFIG_FILE.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
 
-    with CONFIG_FILE.open("r", encoding="utf-8") as file:
+    with CONFIG_FILE.open("r", encoding="utf-8-sig") as file:
         raw = json.load(file)
 
     config = DEFAULT_CONFIG | raw
@@ -230,6 +232,25 @@ def load_config():
     config["question"]["size"] = max(16, min(256, int(config["question"]["size"])))
     config["repair"]["size"] = max(16, min(256, int(config["repair"]["size"])))
     return config
+
+
+def save_gallery_filter(kind, enabled):
+    # Installed sessions share this file. Serialize the read-modify-write so
+    # changing one switch cannot overwrite a concurrent change to the other.
+    with CONFIG_FILE.with_suffix(".json.lock").open("a+b") as lock:
+        msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
+        gallery = raw.setdefault("gallery", {})
+        gallery[f"show_{kind}"] = enabled
+        descriptor, temporary = tempfile.mkstemp(prefix="config-", suffix=".tmp", dir=CONFIG_FILE.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                json.dump(raw, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+            os.replace(temporary, CONFIG_FILE)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+        CONFIG["gallery"][f"show_{kind}"] = enabled
 
 
 def apply_config():
@@ -968,22 +989,20 @@ class RectSelector:
                             getattr(self, "current_width", CONFIG["stroke"]["width"]) == tool[1])
             else:
                 selected = tool == self.active_tool
-            hovered = tool == self.hover_tool
+            hovered = tool == self.hover_tool and self.toolbar_tool_enabled(tool)
             if hovered:
                 self.create_rounded_rect(
                     bx1 - 4, by1 - 4, bx2 + 4, by2 + 4, self.TOOLBAR_RADIUS + 4,
-                    fill="", outline="#555b65", width=3, tags=("toolbar",),
+                    fill="", outline="#3b526a", width=3, tags=("toolbar",),
                 )
                 self.create_rounded_rect(
                     bx1 - 2, by1 - 2, bx2 + 2, by2 + 2, self.TOOLBAR_RADIUS + 2,
-                    fill="", outline="#d8dde6", width=1, tags=("toolbar",),
+                    fill="", outline=ICON_BLUE, width=1, tags=("toolbar",),
                 )
-            outline = CONFIG["colors"][tool[1]] if selected and isinstance(tool, tuple) and tool[0] == "color" else (
-                self.current_color if selected else ("#f4f7fb" if hovered else "#56606d")
-            )
+            outline = ICON_HOVER if hovered else (ICON_BLUE if selected else "#465b70")
             self.create_rounded_rect(
                 bx1, by1, bx2, by2, self.TOOLBAR_RADIUS,
-                fill="#5b1820" if selected and not isinstance(tool, tuple) else "#111827",
+                fill="#24364a" if selected else "#111827",
                 outline=outline,
                 width=1, stipple="gray25", tags=("toolbar",),
             )
@@ -992,9 +1011,9 @@ class RectSelector:
         self.canvas.tag_raise("toolbar")
 
     def draw_toolbar_icon(self, tool, left, top, right, bottom, selected, hovered):
-        color = "#ffe4e6" if selected else ("#eef2f7" if hovered else "#aab2bd")
+        color = ICON_HOVER if hovered else ICON_BLUE
         if not self.toolbar_tool_enabled(tool):
-            color = "#505967"
+            color = ICON_DIM
         cx = (left + right) / 2
         cy = (top + bottom) / 2
         tags = ("toolbar",)
@@ -1004,7 +1023,7 @@ class RectSelector:
         elif isinstance(tool, tuple) and tool[0] == "color":
             self.canvas.create_oval(
                 cx - 9, cy - 9, cx + 9, cy + 9,
-                fill=CONFIG["colors"][tool[1]], outline="#eef2f7" if selected else "",
+                fill=CONFIG["colors"][tool[1]], outline=color if selected or hovered else "",
                 width=1, tags=tags,
             )
         elif tool == "line":
@@ -1792,7 +1811,8 @@ class InfershotApp:
         self.root.withdraw()
         self.root.title("INFERSHOT")
         self.gallery = CaptureGallery(self.root, copy_image_to_clipboard, lambda: CONFIG,
-                                      lambda image: save_image(image, "ScreenSheet-{nnn}"))
+                                      lambda image: save_image(image, "ScreenSheet-{nnn}"),
+                                      save_filter=save_gallery_filter)
         CAPTURE_CALLBACK = lambda image, path: self.tasks.put(("saved", image, path))
         self.root.after(60, self.drain_tasks)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)

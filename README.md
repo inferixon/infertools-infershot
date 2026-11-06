@@ -145,7 +145,8 @@ image's native resolution and order, with 24 px gutters.
 Copy sheet also saves `ScreenSheet-001`, `ScreenSheet-002`, etc. in `save_path`,
 using the configured image format and quality, with separate screenshot numbering.
 Use the two filter icons to show screenshots and sheets independently. Both
-start enabled. Copy sheet and ZIP export use selected images that match the filters.
+start enabled. The app saves each switch in `config.json`. Copy sheet and ZIP
+export use selected images that match the filters.
 The thumbnail close icon immediately moves that image file to the Infershot
 recovery folder; it stays deleted when the manager is reopened. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar
@@ -174,7 +175,7 @@ Resize handles always remain available, including after annotations are added.
   "copy_to_clipboard": true,
   "undo_limit": 20,
   "stroke": {"width": 5, "choices": [3, 5, 9]},
-  "gallery": {"limit": 20},
+  "gallery": {"limit": 20, "show_screenshots": true, "show_sheets": true},
   "colors": ["#ff2020", "#22c55e"],
   "text": {
     "font_family": "Palatino Linotype",

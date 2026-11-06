@@ -6,3 +6,4 @@ Screenshots/
 .DS_Store
 Thumbs.db
 .updates/
+config.json.lock

@@ -13,18 +13,19 @@ from qa_core import sheet_layout, write_capture_archive, screenshot_files, clear
 
 
 BG, PANEL, TEXT, MUTED = "#171a21", "#222630", "#eef2f7", "#9ca8b8"
+ICON_BLUE, ICON_HOVER, ICON_DIM = "#9cbad4", "#c9e2fb", "#596f86"
 
 
-def icon_image(name, size, glow=False, color=TEXT):
+def icon_image(name, size, glow=False, color=ICON_BLUE):
     """Scope-style icon geometry; no font glyph or platform theme dependency."""
     scale = size * 4 / 24
-    image = Image.new("RGBA", (size * 4, size * 4))
-    draw = ImageDraw.Draw(image)
+    mask = Image.new("L", (size * 4, size * 4))
+    draw = ImageDraw.Draw(mask)
     def line(points):
         draw.line([(round(x * scale), round(y * scale)) for x, y in points],
-                  fill=color, width=max(1, round(1.8 * scale)), joint="curve")
+                  fill=255, width=max(1, round(1.8 * scale)), joint="curve")
     if name in {"copy", "copied"}:
-        draw.rectangle(tuple(round(v * scale) for v in (8, 8, 20, 21)), outline=TEXT, width=round(1.8 * scale))
+        draw.rectangle(tuple(round(v * scale) for v in (8, 8, 20, 21)), outline=255, width=round(1.8 * scale))
         line(((16, 8), (16, 3), (3, 3), (3, 16), (8, 16)))
         if name == "copied":
             line(((11, 14), (14, 17), (18, 12)))
@@ -41,7 +42,7 @@ def icon_image(name, size, glow=False, color=TEXT):
             line(((3, 12), (21, 12)))
     elif name == "clear":
         draw.arc(tuple(round(v * scale) for v in (3, 3, 21, 21)), 200, 510,
-                 fill=TEXT, width=round(1.8 * scale))
+                 fill=255, width=round(1.8 * scale))
         line(((3, 3), (3, 10), (10, 10)))
     elif name == "trash":
         line(((4, 6), (20, 6)))
@@ -55,9 +56,10 @@ def icon_image(name, size, glow=False, color=TEXT):
     else:
         line(((5, 5), (19, 19)))
         line(((19, 5), (5, 19)))
-    image = image.resize((size, size), Image.Resampling.LANCZOS)
+    image = Image.new("RGBA", (size, size), color)
+    image.putalpha(mask.resize(image.size, Image.Resampling.LANCZOS))
     if glow:
-        halo = Image.new("RGBA", image.size, "white")
+        halo = Image.new("RGBA", image.size, ICON_HOVER)
         halo.putalpha(image.getchannel("A").filter(ImageFilter.GaussianBlur(1.6)).point(lambda alpha: round(alpha * .65)))
         image = Image.alpha_composite(halo, image)
     return image
@@ -83,12 +85,13 @@ class IconButton(tk.Canvas):
 
     def paint(self):
         self.delete("all")
-        color = "#9cbad4" if self.checked else TEXT
-        icon = icon_image(self.icon, self.size - 6, self.hovered and self.enabled, color)
+        hovered = self.hovered and self.enabled
+        color = ICON_HOVER if hovered else ICON_BLUE
         if not self.enabled:
-            icon.putalpha(icon.getchannel("A").point(lambda value: value // 3))
+            color = ICON_DIM
         elif self.checked is False:
-            icon.putalpha(icon.getchannel("A").point(lambda value: value // 2))
+            color = "#7f9db7" if hovered else ICON_DIM
+        icon = icon_image(self.icon, self.size - 6, hovered, color)
         self.photo = ImageTk.PhotoImage(icon, master=self)
         self.create_image(self.size / 2, self.size / 2, image=self.photo)
         if self.focused:
@@ -137,7 +140,7 @@ class IconButton(tk.Canvas):
 
 
 class CaptureGallery:
-    def __init__(self, root, copy_image, settings=None, save_sheet=None):
+    def __init__(self, root, copy_image, settings=None, save_sheet=None, save_filter=None):
         self.root = root
         self.copy_image = copy_image
         self.items = []
@@ -148,6 +151,7 @@ class CaptureGallery:
         self.on_close = None
         self.settings = settings
         self.save_sheet = save_sheet
+        self.save_filter = save_filter
         self.sheet_feedback_timer = None
         self.anchor = None
         self.bounds = None
@@ -220,6 +224,9 @@ class CaptureGallery:
         self.on_close = on_close
         self.anchor, self.bounds, self.page = anchor, bounds, 0
         self.manual_position = None
+        if self.save_filter:
+            gallery = self.settings()["gallery"]
+            self.shown_types = {kind for kind in ("screenshots", "sheets") if gallery.get(f"show_{kind}", True)}
         try:
             self.sync_folder()
         except OSError as error:
@@ -304,10 +311,17 @@ class CaptureGallery:
                     else "screenshots") in self.shown_types]
 
     def toggle_filter(self, kind):
-        if kind in self.shown_types:
-            self.shown_types.remove(kind)
-        else:
+        enabled = kind not in self.shown_types
+        if self.save_filter:
+            try:
+                self.save_filter(kind, enabled)
+            except (OSError, ValueError, TypeError) as error:
+                messagebox.showerror("Save screenshot filters", str(error), parent=self.window)
+                return
+        if enabled:
             self.shown_types.add(kind)
+        else:
+            self.shown_types.remove(kind)
         self.page = 0
         self.set_sheet_copied()
         self.refresh()
