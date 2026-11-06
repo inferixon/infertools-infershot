@@ -136,6 +136,7 @@ class CaptureGallery:
         self.on_close = None
         self.settings = settings
         self.save_sheet = save_sheet
+        self.sheet_feedback_timer = None
         self.anchor = None
         self.bounds = None
         self.page = 0
@@ -194,6 +195,7 @@ class CaptureGallery:
             self.refresh()
 
     def hide(self):
+        self.set_sheet_copied()
         self.drag_offset = None
         if self.window is not None:
             self.close_button.place_forget()
@@ -403,7 +405,21 @@ class CaptureGallery:
         except Exception as error:
             self.update_status(f"Copy failed: {error}")
 
+    def set_sheet_copied(self, copied=False):
+        if self.window is None or not self.window.winfo_exists():
+            return
+        if self.sheet_feedback_timer is not None:
+            self.window.after_cancel(self.sheet_feedback_timer)
+            self.sheet_feedback_timer = None
+        button = self.action_buttons[0]
+        button.icon = "copied" if copied else "copy"
+        button.title = "Sheet copied" if copied else "Copy sheet"
+        button.paint()
+        if copied:
+            self.sheet_feedback_timer = self.window.after(1500, self.set_sheet_copied)
+
     def copy_sheet(self):
+        self.set_sheet_copied()
         selected = [item for item in self.items if item["selected"]]
         try:
             size, cells = sheet_layout([item["size"] for item in selected])
@@ -421,6 +437,7 @@ class CaptureGallery:
                 return
             saved = f"Saved {path.name}; " if path else ""
             self.update_status(f"{saved}Copied sheet – {size[0]} × {size[1]}")
+            self.set_sheet_copied(True)
         except Exception as error:
             self.update_status(str(error))
 
