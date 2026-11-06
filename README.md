@@ -144,6 +144,8 @@ export selected immutable snapshots with unique filenames. Sheets preserve each
 image's native resolution and order, with 24 px gutters.
 Copy sheet also saves `ScreenSheet-001`, `ScreenSheet-002`, etc. in `save_path`,
 using the configured image format and quality, with separate screenshot numbering.
+Use the two filter icons to show screenshots and sheets independently. Both
+start enabled. Copy sheet and ZIP export use selected images that match the filters.
 The thumbnail close icon immediately moves that image file to the Infershot
 recovery folder; it stays deleted when the manager is reopened. A new capture
 hides the manager before grabbing the desktop. The separate Clear folder toolbar

@@ -15,14 +15,14 @@ from qa_core import sheet_layout, write_capture_archive, screenshot_files, clear
 BG, PANEL, TEXT, MUTED = "#171a21", "#222630", "#eef2f7", "#9ca8b8"
 
 
-def icon_image(name, size, glow=False):
+def icon_image(name, size, glow=False, color=TEXT):
     """Scope-style icon geometry; no font glyph or platform theme dependency."""
     scale = size * 4 / 24
     image = Image.new("RGBA", (size * 4, size * 4))
     draw = ImageDraw.Draw(image)
     def line(points):
         draw.line([(round(x * scale), round(y * scale)) for x, y in points],
-                  fill=TEXT, width=max(1, round(1.8 * scale)), joint="curve")
+                  fill=color, width=max(1, round(1.8 * scale)), joint="curve")
     if name in {"copy", "copied"}:
         draw.rectangle(tuple(round(v * scale) for v in (8, 8, 20, 21)), outline=TEXT, width=round(1.8 * scale))
         line(((16, 8), (16, 3), (3, 3), (3, 16), (8, 16)))
@@ -32,6 +32,13 @@ def icon_image(name, size, glow=False):
         line(((12, 3), (12, 15)))
         line(((7, 10), (12, 15), (17, 10)))
         line(((4, 16), (4, 21), (20, 21), (20, 16)))
+    elif name in {"screenshots", "sheets"}:
+        line(((3, 5), (21, 5), (21, 19), (3, 19), (3, 5)))
+        if name == "screenshots":
+            line(((4, 17), (9, 11), (13, 15), (17, 10), (20, 13)))
+        else:
+            line(((12, 5), (12, 19)))
+            line(((3, 12), (21, 12)))
     elif name == "clear":
         draw.arc(tuple(round(v * scale) for v in (3, 3, 21, 21)), 200, 510,
                  fill=TEXT, width=round(1.8 * scale))
@@ -63,6 +70,7 @@ class IconButton(tk.Canvas):
         self.icon, self.title, self.command, self.size = icon, title, command, size
         self.hovered, self.focused, self.tooltip, self.tip_timer = False, False, None, None
         self.enabled = True
+        self.checked = None
         self.bind("<ButtonRelease-1>", lambda _event: self.invoke())
         self.bind("<Return>", lambda _event: self.invoke())
         self.bind("<space>", lambda _event: self.invoke())
@@ -75,9 +83,12 @@ class IconButton(tk.Canvas):
 
     def paint(self):
         self.delete("all")
-        icon = icon_image(self.icon, self.size - 6, self.hovered and self.enabled)
+        color = "#9cbad4" if self.checked else TEXT
+        icon = icon_image(self.icon, self.size - 6, self.hovered and self.enabled, color)
         if not self.enabled:
             icon.putalpha(icon.getchannel("A").point(lambda value: value // 3))
+        elif self.checked is False:
+            icon.putalpha(icon.getchannel("A").point(lambda value: value // 2))
         self.photo = ImageTk.PhotoImage(icon, master=self)
         self.create_image(self.size / 2, self.size / 2, image=self.photo)
         if self.focused:
@@ -130,6 +141,7 @@ class CaptureGallery:
         self.root = root
         self.copy_image = copy_image
         self.items = []
+        self.shown_types = {"screenshots", "sheets"}
         self.window = None
         self.status = None
         self.photos = []
@@ -241,6 +253,12 @@ class CaptureGallery:
                 button = IconButton(self.actions, icon, title, action)
                 button.pack(side="left", padx=3)
                 self.action_buttons.append(button)
+            self.filter_buttons = {}
+            for kind, padding in (("screenshots", (15, 3)), ("sheets", 3)):
+                button = IconButton(self.actions, kind, f"Show {kind}",
+                                    lambda kind=kind: self.toggle_filter(kind))
+                button.pack(side="left", padx=padding)
+                self.filter_buttons[kind] = button
             self.pagination = tk.Frame(self.window, background=BG)
             self.previous_button = IconButton(self.pagination, "previous", "Previous screenshots", lambda: self.change_page(-1))
             self.previous_button.pack(side="left", padx=3)
@@ -280,6 +298,20 @@ class CaptureGallery:
                 and self.window.winfo_rooty() <= y < self.window.winfo_rooty() + self.window.winfo_height()):
             self.close_button.place_forget()
 
+    def visible_items(self):
+        return [item for item in self.items
+                if ("sheets" if item["path"].name.casefold().startswith("screensheet-")
+                    else "screenshots") in self.shown_types]
+
+    def toggle_filter(self, kind):
+        if kind in self.shown_types:
+            self.shown_types.remove(kind)
+        else:
+            self.shown_types.add(kind)
+        self.page = 0
+        self.set_sheet_copied()
+        self.refresh()
+
     def refresh(self):
         for widget in self.cards.winfo_children():
             widget.destroy()
@@ -293,11 +325,12 @@ class CaptureGallery:
             side_room = room_right if room_right >= tile + 24 else room_left
             if side_room >= tile + 24:
                 available_w = side_room
-        count = max(1, len(self.items))
+        visible = self.visible_items()
+        count = max(1, len(visible))
         columns = max(1, min(count, 6, int((available_w - 16) // (tile + 8))))
         rows = max(1, int((available_h - 80) // (tile + 8)))
         self.page_size = columns * rows
-        pages = max(1, math.ceil(len(self.items) / self.page_size))
+        pages = max(1, math.ceil(len(visible) / self.page_size))
         self.page = min(self.page, pages - 1)
         if pages > 1:
             self.pagination.pack(side="bottom", anchor="w", padx=8, pady=(0, 6), before=self.cards)
@@ -308,12 +341,17 @@ class CaptureGallery:
         self.tile_size = tile
         if self.settings:
             self.action_buttons[2].set_enabled(bool(screenshot_files(self.settings()["save_path"], captures_only=True)))
-        if not self.items:
-            tk.Label(self.cards, text="Capture a region or monitor to add a screenshot.",
+        for kind, button in self.filter_buttons.items():
+            button.checked = kind in self.shown_types
+            button.title = f"Show {kind} ({'on' if button.checked else 'off'})"
+            button.paint()
+        if not visible:
+            message = "No images match the active filters." if self.items else "Capture a region or monitor to add a screenshot."
+            tk.Label(self.cards, text=message,
                      background=BG, foreground=MUTED, font=("Palatino Linotype", 11)).pack(padx=8, pady=20)
         self.card_controls = []
         start = self.page * self.page_size
-        for index, item in enumerate(self.items[start:start + self.page_size]):
+        for index, item in enumerate(visible[start:start + self.page_size]):
             card = tk.Frame(self.cards, background=BG, width=tile, height=tile,
                             highlightthickness=1, highlightbackground="#9cbad4" if item["selected"] else "#505967",
                             takefocus=True)
@@ -375,12 +413,13 @@ class CaptureGallery:
 
     def update_status(self, message=None):
         if self.status is not None:
-            count = sum(item["selected"] for item in self.items)
-            self.status.set(message or f"{count} selected / {len(self.items)} captures")
+            visible = self.visible_items()
+            count = sum(item["selected"] for item in visible)
+            self.status.set(message or f"{count} selected / {len(visible)} captures")
             self.window.title("Infershot – screenshot manager – " + self.status.get())
 
     def export_archive(self, destination=None):
-        selected = [item for item in self.items if item["selected"]]
+        selected = [item for item in self.visible_items() if item["selected"]]
         if not selected:
             self.update_status("Choose at least one screenshot")
             return
@@ -420,7 +459,7 @@ class CaptureGallery:
 
     def copy_sheet(self):
         self.set_sheet_copied()
-        selected = [item for item in self.items if item["selected"]]
+        selected = [item for item in self.visible_items() if item["selected"]]
         try:
             size, cells = sheet_layout([item["size"] for item in selected])
             if size[0] * size[1] > 100_000_000:
